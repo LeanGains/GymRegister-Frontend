@@ -125,7 +125,7 @@ export const assetApi = {
 // AI Analysis API endpoints
 export const analysisApi = {
   // Analyze image for equipment detection
-  analyzeImage: async (imageData: string): Promise<AnalysisResult> => {
+  analyzeImage: async (imageData: string): Promise<any> => {
     const response = await api.post('/api/analyze', {
       image: imageData
     });
