@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  # React Frontend
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+    volumes:
+      # For development, mount source code
+      - ./src:/app/src:ro
+      - ./public:/app/public:ro
+    depends_on:
+      - backend
+    networks:
+      - gymregister-network
+
+  # Backend (placeholder - will be updated when backend is ready)
+  backend:
+    image: python:3.11-slim
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    volumes:
+      - backend_data:/app/data
+    command: >
+      sh -c "
+        echo 'Backend placeholder - replace with actual backend service';
+        python -m http.server 8000
+      "
+    networks:
+      - gymregister-network
+
+  # Development database (SQLite in volume)
+  database:
+    image: alpine:latest
+    volumes:
+      - db_data:/data
+    command: >
+      sh -c "
+        echo 'Database volume initialized';
+        tail -f /dev/null
+      "
+    networks:
+      - gymregister-network
+
+volumes:
+  backend_data:
+    driver: local
+  db_data:
+    driver: local
+
+networks:
+  gymregister-network:
+    driver: bridge
