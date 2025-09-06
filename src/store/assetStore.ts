@@ -44,6 +44,13 @@ export interface AnalysisResult {
   raw_response?: string;
 }
 
+export interface StoredAnalysisResult {
+  id: string;
+  timestamp: string;
+  result: any;
+  image: string;
+}
+
 interface AssetStore {
   // Assets data
   assets: Asset[];
@@ -55,6 +62,7 @@ interface AssetStore {
   
   // Analysis state
   analysisResult: AnalysisResult | null;
+  analysisHistory: StoredAnalysisResult[];
   registeredItems: Set<string>;
   
   // Actions
@@ -70,6 +78,8 @@ interface AssetStore {
   setError: (error: string | null) => void;
   
   setAnalysisResult: (result: AnalysisResult | null) => void;
+  addAnalysisResult: (result: StoredAnalysisResult) => void;
+  clearAnalysisHistory: () => void;
   addRegisteredItem: (itemKey: string) => void;
   removeRegisteredItem: (itemKey: string) => void;
   clearRegisteredItems: () => void;
@@ -96,6 +106,7 @@ export const useAssetStore = create<AssetStore>()(
       loading: false,
       error: null,
       analysisResult: null,
+      analysisHistory: [],
       registeredItems: new Set(),
 
       // Asset actions
@@ -181,6 +192,14 @@ export const useAssetStore = create<AssetStore>()(
       // Analysis actions
       setAnalysisResult: (result) => set({ analysisResult: result }),
       
+      addAnalysisResult: (result) => {
+        set((state) => ({
+          analysisHistory: [...state.analysisHistory, result],
+        }));
+      },
+      
+      clearAnalysisHistory: () => set({ analysisHistory: [] }),
+      
       addRegisteredItem: (itemKey) => {
         set((state) => ({
           registeredItems: new Set([...Array.from(state.registeredItems), itemKey]),
@@ -235,6 +254,7 @@ export const useAssetStore = create<AssetStore>()(
       partialize: (state) => ({
         assets: state.assets,
         auditLogs: state.auditLogs,
+        analysisHistory: state.analysisHistory,
       }),
     }
   )
