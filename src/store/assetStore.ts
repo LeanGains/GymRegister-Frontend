@@ -183,7 +183,7 @@ export const useAssetStore = create<AssetStore>()(
       
       addRegisteredItem: (itemKey) => {
         set((state) => ({
-          registeredItems: new Set([...state.registeredItems, itemKey]),
+          registeredItems: new Set([...Array.from(state.registeredItems), itemKey]),
         }));
       },
       
