@@ -75,7 +75,7 @@ const SearchAsset: React.FC = () => {
     }
 
     if (newLocation.trim() === foundAsset.location) {
-      toast.info('Location unchanged');
+      toast('Location unchanged', { icon: 'ℹ️' });
       return;
     }
 
