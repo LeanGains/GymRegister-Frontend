@@ -129,7 +129,11 @@ const ViewAssets: React.FC = () => {
       field: 'asset_tag',
       headerName: 'Asset Tag',
       width: 120,
-      fontWeight: 'bold',
+      renderCell: (params: GridRenderCellParams) => (
+        <Box sx={{ fontWeight: 'bold' }}>
+          {params.value}
+        </Box>
+      ),
     },
     {
       field: 'item_type',
@@ -205,7 +209,7 @@ const ViewAssets: React.FC = () => {
               size="small"
               onClick={() => {
                 // TODO: Implement edit functionality
-                toast.info('Edit functionality coming soon!');
+                toast('Edit functionality coming soon!', { icon: 'ℹ️' });
               }}
             >
               <EditIcon fontSize="small" />
