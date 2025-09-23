@@ -10,12 +10,18 @@ import {
     DialogActions,
     Alert,
     CircularProgress,
+    Fade,
+    Zoom,
 } from '@mui/material';
 import {
     CameraAlt as CameraIcon,
     FlipCameraIos as FlipIcon,
     Close as CloseIcon,
     Refresh as RefreshIcon,
+    FlashOn as FlashIcon,
+    FlashOff as FlashOffIcon,
+    GridOn as GridIcon,
+    GridOff as GridOffIcon,
 } from '@mui/icons-material';
 
 interface CameraCaptureProps {
@@ -38,12 +44,31 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({
     const [error, setError] = useState<string | null>(null);
     const [isCapturing, setIsCapturing] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
+    const [showGrid, setShowGrid] = useState(true);
+    const [captureFlash, setCaptureFlash] = useState(false);
+    const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
+    const [videoReady, setVideoReady] = useState(false);
 
-    // Start camera
+    // Enumerate available cameras
+    const enumerateCameras = useCallback(async () => {
+        try {
+            if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const cameras = devices.filter(device => device.kind === 'videoinput');
+                setAvailableCameras(cameras);
+                console.log('Available cameras:', cameras.length);
+            }
+        } catch (err) {
+            console.warn('Could not enumerate cameras:', err);
+        }
+    }, []);
+
+    // Start camera with enhanced error handling
     const startCamera = useCallback(async () => {
         console.log('Starting camera with facingMode:', facingMode);
         setIsLoading(true);
         setError(null);
+        setVideoReady(false);
 
         try {
             // Stop existing stream
@@ -53,17 +78,24 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({
 
             // Check if getUserMedia is supported
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                throw new Error('Camera API not supported in this browser');
+                throw new Error('Camera API not supported in this browser. Please use a modern browser like Chrome, Firefox, or Safari.');
             }
+
+            // Enumerate cameras first
+            await enumerateCameras();
 
             console.log('Requesting camera permission...');
 
-            // Request camera access
+            // Enhanced constraints for better quality
             const constraints = {
                 video: {
                     facingMode: facingMode,
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 }
+                    width: { ideal: 1920, max: 1920 },
+                    height: { ideal: 1080, max: 1080 },
+                    frameRate: { ideal: 30, max: 60 },
+                    focusMode: 'continuous',
+                    whiteBalanceMode: 'auto',
+                    exposureMode: 'continuous',
                 },
                 audio: false
             };
@@ -75,28 +107,82 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({
 
             if (videoRef.current) {
                 videoRef.current.srcObject = stream;
-                videoRef.current.play();
+
+                // Wait for video metadata to load
+                videoRef.current.onloadedmetadata = () => {
+                    console.log('Video metadata loaded:', {
+                        width: videoRef.current?.videoWidth,
+                        height: videoRef.current?.videoHeight,
+                    });
+                    setVideoReady(true);
+                    setIsLoading(false);
+                };
+
+                await videoRef.current.play();
             }
 
             setHasPermission(true);
-            setIsLoading(false);
 
         } catch (err: any) {
             console.error('Camera error:', err);
             setHasPermission(false);
             setIsLoading(false);
+            setVideoReady(false);
 
+            // Enhanced error messages
             if (err.name === 'NotAllowedError') {
-                setError('Camera access denied. Please allow camera permissions and try again.');
+                setError('Camera access denied. Please click the camera icon in your browser\'s address bar and allow camera access, then try again.');
             } else if (err.name === 'NotFoundError') {
-                setError('No camera found. Please connect a camera and try again.');
+                setError('No camera found on this device. Please connect a camera and refresh the page.');
             } else if (err.name === 'NotReadableError') {
-                setError('Camera is already in use by another application.');
+                setError('Camera is already in use by another application. Please close other camera apps and try again.');
             } else if (err.name === 'OverconstrainedError') {
-                setError('Camera constraints not supported. Trying with different settings...');
+                setError('Camera settings not supported. Trying with basic settings...');
+                // Try with fallback constraints
+                setTimeout(() => startCameraFallback(), 1000);
+                return;
+            } else if (err.name === 'TypeError') {
+                setError('Camera API not available. Please ensure you\'re using HTTPS or localhost.');
             } else {
-                setError(`Failed to access camera: ${err.message || err.name || 'Unknown error'}`);
+                setError(`Camera error: ${err.message || err.name || 'Unknown error'}. Please refresh and try again.`);
             }
+        }
+    }, [facingMode, enumerateCameras]);
+
+    // Fallback camera start with basic constraints
+    const startCameraFallback = useCallback(async () => {
+        console.log('Trying camera fallback...');
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            const basicConstraints = {
+                video: {
+                    facingMode: facingMode,
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                },
+                audio: false
+            };
+
+            const stream = await navigator.mediaDevices.getUserMedia(basicConstraints);
+            streamRef.current = stream;
+
+            if (videoRef.current) {
+                videoRef.current.srcObject = stream;
+                videoRef.current.onloadedmetadata = () => {
+                    setVideoReady(true);
+                    setIsLoading(false);
+                };
+                await videoRef.current.play();
+            }
+
+            setHasPermission(true);
+        } catch (err) {
+            console.error('Camera fallback error:', err);
+            setHasPermission(false);
+            setIsLoading(false);
+            setError('Unable to access camera even with basic settings. Please check your camera permissions.');
         }
     }, [facingMode]);
 
@@ -111,15 +197,19 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({
         }
     }, []);
 
-    // Capture photo
+    // Enhanced capture photo with flash effect
     const capturePhoto = useCallback(() => {
-        if (!videoRef.current || !canvasRef.current) {
-            setError('Camera not ready. Please try again.');
+        if (!videoRef.current || !canvasRef.current || !videoReady) {
+            setError('Camera not ready. Please wait a moment and try again.');
             return;
         }
 
         setIsCapturing(true);
         setError(null);
+
+        // Flash effect
+        setCaptureFlash(true);
+        setTimeout(() => setCaptureFlash(false), 150);
 
         try {
             const video = videoRef.current;
@@ -130,41 +220,88 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({
                 throw new Error('Could not get canvas context');
             }
 
-            // Set canvas dimensions to match video
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
+            // Set canvas dimensions to match video with high quality
+            const videoWidth = video.videoWidth;
+            const videoHeight = video.videoHeight;
 
-            // Draw video frame to canvas
-            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            console.log('Capturing at resolution:', videoWidth, 'x', videoHeight);
 
-            // Convert to base64
-            const dataURL = canvas.toDataURL('image/jpeg', 0.8);
+            canvas.width = videoWidth;
+            canvas.height = videoHeight;
+
+            // Clear canvas and draw video frame
+            context.clearRect(0, 0, videoWidth, videoHeight);
+            context.drawImage(video, 0, 0, videoWidth, videoHeight);
+
+            // Convert to base64 with high quality
+            const dataURL = canvas.toDataURL('image/jpeg', 0.9);
             const base64Data = dataURL.split(',')[1];
-            const assetTag = '';
-            if (base64Data) {
-                onCapture(base64Data, assetTag);
+
+            if (base64Data && base64Data.length > 0) {
+                console.log('Capture successful, data size:', Math.round(base64Data.length / 1024), 'KB');
+                onCapture(base64Data);
             } else {
-                setError('Failed to capture image. Please try again.');
+                throw new Error('No image data captured');
             }
         } catch (err) {
             console.error('Capture error:', err);
-            setError('Failed to capture image. Please try again.');
+            setError('Failed to capture image. Please try again or check your camera connection.');
         } finally {
-            setIsCapturing(false);
+            setTimeout(() => setIsCapturing(false), 500); // Slight delay for better UX
         }
-    }, [onCapture]);
+    }, [onCapture, videoReady]);
 
     // Toggle camera (front/back)
     const toggleCamera = useCallback(() => {
-        setFacingMode(prev => prev === 'user' ? 'environment' : 'user');
+        if (availableCameras.length > 1) {
+            setFacingMode(prev => prev === 'user' ? 'environment' : 'user');
+        }
+    }, [availableCameras.length]);
+
+    // Toggle grid
+    const toggleGrid = useCallback(() => {
+        setShowGrid(prev => !prev);
     }, []);
 
     // Retry camera access
     const retryCamera = useCallback(() => {
         setError(null);
         setHasPermission(null);
+        setVideoReady(false);
         startCamera();
     }, [startCamera]);
+
+    // Grid overlay component
+    const GridOverlay = React.memo(() => (
+        <Box
+            sx={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                pointerEvents: 'none',
+                opacity: showGrid ? 0.3 : 0,
+                transition: 'opacity 0.2s ease',
+            }}
+        >
+            {/* Rule of thirds grid */}
+            <svg width="100%" height="100%" style={{ position: 'absolute' }}>
+                <defs>
+                    <pattern id="grid" width="33.333%" height="33.333%" patternUnits="objectBoundingBox">
+                        <rect width="100%" height="100%" fill="none" stroke="white" strokeWidth="1" />
+                    </pattern>
+                </defs>
+                <rect width="100%" height="100%" fill="url(#grid)" />
+                {/* Vertical lines */}
+                <line x1="33.333%" y1="0" x2="33.333%" y2="100%" stroke="white" strokeWidth="1" />
+                <line x1="66.666%" y1="0" x2="66.666%" y2="100%" stroke="white" strokeWidth="1" />
+                {/* Horizontal lines */}
+                <line x1="0" y1="33.333%" x2="100%" y2="33.333%" stroke="white" strokeWidth="1" />
+                <line x1="0" y1="66.666%" x2="100%" y2="66.666%" stroke="white" strokeWidth="1" />
+            </svg>
+        </Box>
+    ));
 
     // Start camera when component mounts or facingMode changes
     useEffect(() => {
@@ -309,6 +446,24 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({
                                 style={{ display: 'none' }}
                             />
 
+                            {/* Grid overlay */}
+                            <GridOverlay />
+
+                            {/* Flash overlay for capture effect */}
+                            <Fade in={captureFlash} timeout={150}>
+                                <Box
+                                    sx={{
+                                        position: 'absolute',
+                                        top: 0,
+                                        left: 0,
+                                        right: 0,
+                                        bottom: 0,
+                                        bgcolor: 'rgba(255, 255, 255, 0.8)',
+                                        pointerEvents: 'none',
+                                    }}
+                                />
+                            </Fade>
+
                             {/* Camera overlay */}
                             <Box
                                 sx={{
@@ -325,84 +480,158 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({
                                 }}
                             >
                                 {/* Top controls */}
-                                <Box display="flex" justifyContent="flex-end">
-                                    <IconButton
-                                        onClick={toggleCamera}
-                                        sx={{
-                                            color: 'white',
-                                            bgcolor: 'rgba(0,0,0,0.5)',
-                                            pointerEvents: 'auto',
-                                            '&:hover': {
-                                                bgcolor: 'rgba(0,0,0,0.7)',
-                                            },
-                                        }}
-                                    >
-                                        <FlipIcon />
-                                    </IconButton>
+                                <Box display="flex" justifyContent="space-between" alignItems="flex-start">
+                                    <Box display="flex" gap={1}>
+                                        <IconButton
+                                            onClick={toggleGrid}
+                                            sx={{
+                                                color: 'white',
+                                                bgcolor: showGrid ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.5)',
+                                                pointerEvents: 'auto',
+                                                '&:hover': {
+                                                    bgcolor: showGrid ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.7)',
+                                                },
+                                            }}
+                                            title={showGrid ? 'Hide grid' : 'Show grid'}
+                                        >
+                                            {showGrid ? <GridOffIcon /> : <GridIcon />}
+                                        </IconButton>
+                                    </Box>
+
+                                    <Box display="flex" gap={1}>
+                                        {availableCameras.length > 1 && (
+                                            <IconButton
+                                                onClick={toggleCamera}
+                                                sx={{
+                                                    color: 'white',
+                                                    bgcolor: 'rgba(0,0,0,0.5)',
+                                                    pointerEvents: 'auto',
+                                                    '&:hover': {
+                                                        bgcolor: 'rgba(0,0,0,0.7)',
+                                                    },
+                                                }}
+                                                title="Switch camera"
+                                            >
+                                                <FlipIcon />
+                                            </IconButton>
+                                        )}
+                                    </Box>
                                 </Box>
 
-                                {/* Center guide */}
-                                <Box
-                                    sx={{
-                                        alignSelf: 'center',
-                                        width: 250,
-                                        height: 250,
-                                        border: '2px solid rgba(255,255,255,0.8)',
-                                        borderRadius: 2,
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                    }}
-                                >
-                                    <Typography
-                                        variant="body2"
+                                {/* Center focus guide */}
+                                <Zoom in={videoReady} timeout={500}>
+                                    <Box
                                         sx={{
-                                            color: 'white',
-                                            textAlign: 'center',
-                                            bgcolor: 'rgba(0,0,0,0.5)',
-                                            p: 1,
-                                            borderRadius: 1,
+                                            alignSelf: 'center',
+                                            width: { xs: 200, sm: 280 },
+                                            height: { xs: 200, sm: 280 },
+                                            border: '2px solid rgba(255,255,255,0.6)',
+                                            borderRadius: 2,
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            gap: 1,
                                         }}
                                     >
-                                        Position equipment in frame
-                                    </Typography>
-                                </Box>
+                                        <Typography
+                                            variant="body2"
+                                            sx={{
+                                                color: 'white',
+                                                textAlign: 'center',
+                                                bgcolor: 'rgba(0,0,0,0.6)',
+                                                px: 2,
+                                                py: 1,
+                                                borderRadius: 1,
+                                                fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                                            }}
+                                        >
+                                            📦 Position equipment in frame
+                                        </Typography>
+                                        <Typography
+                                            variant="caption"
+                                            sx={{
+                                                color: 'rgba(255,255,255,0.8)',
+                                                textAlign: 'center',
+                                                bgcolor: 'rgba(0,0,0,0.4)',
+                                                px: 1.5,
+                                                py: 0.5,
+                                                borderRadius: 0.5,
+                                                fontSize: { xs: '0.625rem', sm: '0.75rem' },
+                                            }}
+                                        >
+                                            Ensure good lighting for best results
+                                        </Typography>
+                                    </Box>
+                                </Zoom>
 
-                                {/* Bottom space for controls */}
-                                <Box height={80} />
+                                {/* Bottom info */}
+                                <Box display="flex" justifyContent="center" alignItems="center">
+                                    {videoReady && (
+                                        <Typography
+                                            variant="caption"
+                                            sx={{
+                                                color: 'rgba(255,255,255,0.8)',
+                                                bgcolor: 'rgba(0,0,0,0.4)',
+                                                px: 1.5,
+                                                py: 0.5,
+                                                borderRadius: 1,
+                                                fontSize: '0.75rem',
+                                            }}
+                                        >
+                                            📹 {videoRef.current?.videoWidth}x{videoRef.current?.videoHeight}
+                                        </Typography>
+                                    )}
+                                </Box>
                             </Box>
                         </>
                     )}
                 </Box>
             </DialogContent>
 
-            <DialogActions sx={{ p: 3, justifyContent: 'center' }}>
-                {hasPermission && !error && !isLoading && (
-                    <Button
-                        variant="contained"
-                        size="large"
-                        onClick={capturePhoto}
-                        disabled={isCapturing || isAnalyzing}
-                        startIcon={
-                            isCapturing || isAnalyzing ? (
-                                <CircularProgress size={20} />
-                            ) : (
-                                <CameraIcon />
-                            )
-                        }
-                        sx={{
-                            minWidth: 200,
-                            height: 56,
-                            fontSize: '1.1rem',
-                        }}
-                    >
-                        {isCapturing
-                            ? 'Capturing...'
-                            : isAnalyzing
-                                ? 'Analyzing...'
-                                : 'Capture Photo'
-                        }
-                    </Button>
+            <DialogActions sx={{ p: 3, justifyContent: 'center', gap: 2 }}>
+                {hasPermission && !error && !isLoading && videoReady && (
+                    <Zoom in={true} timeout={300}>
+                        <Button
+                            variant="contained"
+                            size="large"
+                            onClick={capturePhoto}
+                            disabled={isCapturing || isAnalyzing}
+                            startIcon={
+                                isCapturing || isAnalyzing ? (
+                                    <CircularProgress size={20} color="inherit" />
+                                ) : (
+                                    <CameraIcon />
+                                )
+                            }
+                            sx={{
+                                minWidth: 220,
+                                height: 64,
+                                fontSize: '1.2rem',
+                                fontWeight: 600,
+                                borderRadius: 3,
+                                boxShadow: 3,
+                                background: isCapturing
+                                    ? 'linear-gradient(45deg, #ff9800 30%, #f57c00 90%)'
+                                    : 'linear-gradient(45deg, #2196f3 30%, #1976d2 90%)',
+                                '&:hover': {
+                                    boxShadow: 6,
+                                    transform: 'translateY(-2px)',
+                                },
+                                '&:disabled': {
+                                    background: 'linear-gradient(45deg, #bdbdbd 30%, #9e9e9e 90%)',
+                                },
+                                transition: 'all 0.2s ease-in-out',
+                            }}
+                        >
+                            {isCapturing
+                                ? '📸 Capturing...'
+                                : isAnalyzing
+                                    ? '🔍 Analyzing...'
+                                    : '📸 Capture Photo'
+                            }
+                        </Button>
+                    </Zoom>
                 )}
 
                 {/* Show retry button when there's an error */}
@@ -416,9 +645,31 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({
                             minWidth: 200,
                             height: 56,
                             fontSize: '1.1rem',
+                            borderRadius: 3,
+                            borderWidth: 2,
+                            '&:hover': {
+                                borderWidth: 2,
+                                transform: 'translateY(-1px)',
+                            },
                         }}
                     >
-                        Try Again
+                        🔄 Try Again
+                    </Button>
+                )}
+
+                {/* Loading state for initial camera setup */}
+                {(hasPermission === null || isLoading) && !error && (
+                    <Button
+                        disabled
+                        size="large"
+                        startIcon={<CircularProgress size={20} />}
+                        sx={{
+                            minWidth: 200,
+                            height: 56,
+                            fontSize: '1.1rem',
+                        }}
+                    >
+                        Setting up camera...
                     </Button>
                 )}
             </DialogActions>

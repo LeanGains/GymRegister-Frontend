@@ -30,6 +30,7 @@ import CameraCapture from '../components/Camera/CameraCapture';
 import ImageUpload from '../components/Upload/ImageUpload';
 import { analysisApi } from '../services/api';
 import { useAssetStore } from '../store/assetStore';
+import ImageAnalysisUtils, { ImageQualityMetrics } from '../utils/imageAnalysisUtils';
 
 interface AnalysisJobResponse {
   job_id: string;
@@ -101,6 +102,8 @@ const EquipmentScanner: React.FC = () => {
   } | null>(null);
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   const [analysisStatus, setAnalysisStatus] = useState<string>('');
+  const [imageQualityMetrics, setImageQualityMetrics] = useState<ImageQualityMetrics | null>(null);
+  const [preAnalysisTime, setPreAnalysisTime] = useState<number>(0);
 
   // Poll for analysis results
   const pollAnalysisResult = useCallback(async (jobId: string): Promise<void> => {
@@ -168,8 +171,10 @@ const EquipmentScanner: React.FC = () => {
     await checkStatus();
   }, [addAnalysisResult, capturedImage]);
 
-  // Handle image analysis
+  // Handle image analysis with quality assessment
   const analyzeImage = useCallback(async (imageData: string, fileName: string) => {
+    const startTime = performance.now();
+    setPreAnalysisTime(startTime);
     setIsAnalyzing(true);
     setError(null);
     setEquipmentItems([]);
@@ -178,8 +183,43 @@ const EquipmentScanner: React.FC = () => {
     setCapturedImage(`data:image/jpeg;base64,${imageData}`);
     setImageFileName(fileName);
     setAnalysisStatus('pending');
+    setImageQualityMetrics(null);
 
     try {
+      // Perform client-side image quality analysis
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const img = new Image();
+
+      await new Promise((resolve, reject) => {
+        img.onload = async () => {
+          try {
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx?.drawImage(img, 0, 0);
+
+            // Analyze image quality
+            const qualityMetrics = ImageAnalysisUtils.analyzeImageQuality(canvas);
+            setImageQualityMetrics(qualityMetrics);
+
+            // Show quality feedback to user
+            if (qualityMetrics.quality === 'poor') {
+              toast.error(`Image quality is ${qualityMetrics.quality}. Consider retaking for better results.`);
+            } else if (qualityMetrics.quality === 'fair') {
+              toast.error(`Image quality is ${qualityMetrics.quality}. Results may vary.`);
+            } else {
+              toast.success(`Image quality is ${qualityMetrics.quality}! Proceeding with analysis.`);
+            }
+
+            resolve(true);
+          } catch (err) {
+            reject(err);
+          }
+        };
+        img.onerror = reject;
+        img.src = `data:image/jpeg;base64,${imageData}`;
+      });
+
       // Start analysis job
       const jobResponse: AnalysisJobResponse = await analysisApi.analyzeImage(imageData);
       
@@ -196,6 +236,7 @@ const EquipmentScanner: React.FC = () => {
       toast.error(errorMessage);
       setIsAnalyzing(false);
       setCurrentJobId(null);
+      setImageQualityMetrics(null);
     }
   }, [pollAnalysisResult]);
 
@@ -229,7 +270,7 @@ const EquipmentScanner: React.FC = () => {
     setImageFileName('');
   }, []);
 
-  // Reset scanner
+  // Reset scanner completely
   const resetScannerComplete = useCallback(() => {
     setAnalysisResult(null);
     setEquipmentItems([]);
@@ -239,6 +280,8 @@ const EquipmentScanner: React.FC = () => {
     setImageFileName('');
     setCurrentJobId(null);
     setAnalysisStatus('');
+    setImageQualityMetrics(null);
+    setPreAnalysisTime(0);
   }, []);
 
   // Navigate to register with pre-filled data for a specific equipment item
@@ -413,10 +456,78 @@ const EquipmentScanner: React.FC = () => {
                 </Grid>
               </Grid>
 
+              {/* Image Quality Details */}
+              {imageQualityMetrics && (
+                <Box mt={2}>
+                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                    📊 Image Analysis Details
+                  </Typography>
+                  <Grid container spacing={2} sx={{ mb: 2 }}>
+                    <Grid item xs={6} sm={3}>
+                      <Typography variant="caption" color="text.secondary">
+                        Resolution
+                      </Typography>
+                      <Typography variant="body2" fontWeight="bold">
+                        {imageQualityMetrics.resolution.width}×{imageQualityMetrics.resolution.height}
+                        <Typography variant="caption" color="text.secondary" ml={1}>
+                          ({imageQualityMetrics.resolution.megapixels}MP)
+                        </Typography>
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={6} sm={3}>
+                      <Typography variant="caption" color="text.secondary">
+                        Brightness
+                      </Typography>
+                      <Typography variant="body2" fontWeight="bold">
+                        {Math.round(imageQualityMetrics.brightness)}/255
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={6} sm={3}>
+                      <Typography variant="caption" color="text.secondary">
+                        Contrast
+                      </Typography>
+                      <Typography variant="body2" fontWeight="bold">
+                        {Math.round(imageQualityMetrics.contrast)}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={6} sm={3}>
+                      <Typography variant="caption" color="text.secondary">
+                        Sharpness
+                      </Typography>
+                      <Typography variant="body2" fontWeight="bold">
+                        {Math.round(imageQualityMetrics.sharpness)}
+                      </Typography>
+                    </Grid>
+                  </Grid>
+
+                  {imageQualityMetrics.recommendations.length > 0 && (
+                    <Alert 
+                      severity={
+                        imageQualityMetrics.quality === 'excellent' ? 'success' :
+                        imageQualityMetrics.quality === 'good' ? 'info' :
+                        imageQualityMetrics.quality === 'fair' ? 'warning' : 'error'
+                      }
+                      sx={{ mb: 2 }}
+                    >
+                      <Typography variant="subtitle2" gutterBottom>
+                        📸 Image Quality Tips:
+                      </Typography>
+                      <Box component="ul" sx={{ pl: 2, mb: 0 }}>
+                        {imageQualityMetrics.recommendations.map((tip, index) => (
+                          <li key={index}>
+                            <Typography variant="body2">{tip}</Typography>
+                          </li>
+                        ))}
+                      </Box>
+                    </Alert>
+                  )}
+                </Box>
+              )}
+
               {analysisMetadata.recommendations && (
                 <Box mt={2}>
                   <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                    AI Recommendations
+                    🤖 AI Analysis Recommendations
                   </Typography>
                   <Alert severity="info" sx={{ mb: 2 }}>
                     {analysisMetadata.recommendations}
