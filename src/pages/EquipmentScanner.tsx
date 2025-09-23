@@ -102,6 +102,8 @@ const EquipmentScanner: React.FC = () => {
   } | null>(null);
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   const [analysisStatus, setAnalysisStatus] = useState<string>('');
+  const [imageQualityMetrics, setImageQualityMetrics] = useState<ImageQualityMetrics | null>(null);
+  const [preAnalysisTime, setPreAnalysisTime] = useState<number>(0);
 
   // Poll for analysis results
   const pollAnalysisResult = useCallback(async (jobId: string): Promise<void> => {
