@@ -292,6 +292,93 @@ const EquipmentScanner: React.FC = () => {
     setPreAnalysisTime(0);
   }, []);
 
+  // Add equipment item directly to register
+  const addEquipmentToRegister = useCallback(async (equipment: EquipmentItem, index: number) => {
+    const itemKey = `${equipment.suggested_asset_tag}-${index}`;
+    
+    // Check if already registered
+    if (registeredItemsLocal.has(itemKey) || getAssetByTag(equipment.suggested_asset_tag)) {
+      toast.error('This item has already been registered');
+      return;
+    }
+
+    // Check if already registering
+    if (registeringItems.has(itemKey)) {
+      return;
+    }
+
+    try {
+      // Add to registering set
+      setRegisteringItems(prev => new Set([...prev, itemKey]));
+      setFailedItems(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(itemKey);
+        return newSet;
+      });
+
+      // Prepare asset data
+      const assetData = {
+        asset_tag: equipment.suggested_asset_tag,
+        item_type: equipment.type,
+        description: equipment.description,
+        location: equipment.location_in_image || 'Scanned Location',
+        weight: equipment.weight,
+        condition: equipment.condition as 'Excellent' | 'Good' | 'Fair' | 'Poor' | 'Needs Repair',
+        notes: `Added via AI Equipment Scanner. ${equipment.location_in_image ? `Location in image: ${equipment.location_in_image}` : ''}`,
+      };
+
+      // Call API to register asset
+      await assetApi.createAsset(assetData);
+      
+      // Add to local store
+      addAsset({
+        asset_tag: assetData.asset_tag,
+        item_type: assetData.item_type,
+        description: assetData.description,
+        location: assetData.location,
+        weight: assetData.weight,
+        condition: assetData.condition,
+        notes: assetData.notes,
+        status: 'Active',
+        last_seen: new Date().toISOString().split('T')[0],
+      });
+
+      // Update state
+      setRegisteredItemsLocal(prev => new Set([...prev, itemKey]));
+      addRegisteredItem(itemKey);
+
+      // Show success message
+      toast.success(`${equipment.type} (${equipment.suggested_asset_tag}) registered successfully!`);
+
+    } catch (error: any) {
+      console.error('Registration error:', error);
+      
+      // Add to failed items
+      setFailedItems(prev => new Set([...prev, itemKey]));
+      
+      // Handle specific error types
+      let errorMessage = 'Failed to register equipment';
+      if (error.response?.status === 409) {
+        errorMessage = 'Asset tag already exists';
+      } else if (error.response?.status === 400) {
+        errorMessage = 'Invalid equipment data';
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      toast.error(`Failed to register ${equipment.type}: ${errorMessage}`);
+    } finally {
+      // Remove from registering set
+      setRegisteringItems(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(itemKey);
+        return newSet;
+      });
+    }
+  }, [addAsset, getAssetByTag, registeringItems, registeredItemsLocal, addRegisteredItem]);
+
   // Navigate to register with pre-filled data for a specific equipment item
   const registerSingleEquipment = useCallback((equipment: EquipmentItem) => {
     navigate('/register', {
