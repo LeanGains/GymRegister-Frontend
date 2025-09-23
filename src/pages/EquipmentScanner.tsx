@@ -31,6 +31,41 @@ import ImageUpload from '../components/Upload/ImageUpload';
 import { analysisApi } from '../services/api';
 import { useAssetStore } from '../store/assetStore';
 
+interface AnalysisJobResponse {
+  job_id: string;
+  status: string;
+  message: string;
+}
+
+interface EquipmentItem {
+  type: string;
+  weight?: string;
+  description: string;
+  condition: string;
+  suggested_asset_tag: string;
+  location_in_image: string;
+}
+
+interface AnalysisResultResponse {
+  id: string;
+  asset_tag: string | null;
+  original_filename: string;
+  status: string;
+  result: {
+    asset_tags: string[];
+    equipment: EquipmentItem[];
+    image_quality: string;
+    total_items: number;
+    recommendations: string;
+    confidence_score: number;
+  };
+  error_message: string | null;
+  confidence_score: number;
+  created_at: string;
+  completed_at: string;
+  processing_time: number;
+}
+
 interface AnalysisResult {
   item_type: string;
   description: string;
@@ -56,51 +91,113 @@ const EquipmentScanner: React.FC = () => {
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [imageFileName, setImageFileName] = useState<string>('');
 
+  const [equipmentItems, setEquipmentItems] = useState<EquipmentItem[]>([]);
+  const [analysisMetadata, setAnalysisMetadata] = useState<{
+    imageQuality: string;
+    totalItems: number;
+    recommendations: string;
+    confidenceScore: number;
+    processingTime: number;
+  } | null>(null);
+  const [currentJobId, setCurrentJobId] = useState<string | null>(null);
+  const [analysisStatus, setAnalysisStatus] = useState<string>('');
+
+  // Poll for analysis results
+  const pollAnalysisResult = useCallback(async (jobId: string): Promise<void> => {
+    const maxRetries = 30; // 30 retries with 2-second intervals = 1 minute max
+    let retries = 0;
+
+    const checkStatus = async (): Promise<void> => {
+      try {
+        const result: AnalysisResultResponse = await analysisApi.getAnalysisResult(jobId);
+        
+        setAnalysisStatus(result.status);
+
+        if (result.status === 'completed') {
+          // Analysis completed successfully
+          setEquipmentItems(result.result.equipment);
+          setAnalysisMetadata({
+            imageQuality: result.result.image_quality,
+            totalItems: result.result.total_items,
+            recommendations: result.result.recommendations,
+            confidenceScore: result.result.confidence_score,
+            processingTime: result.processing_time,
+          });
+
+          // Store in global state for history
+          addAnalysisResult({
+            id: result.id,
+            timestamp: result.created_at,
+            result: {
+              item_type: `${result.result.total_items} Equipment Items`,
+              description: `Detected ${result.result.equipment.length} equipment items`,
+              condition: 'Analysis Complete',
+              confidence: result.result.confidence_score,
+              suggestions: {
+                notes: result.result.recommendations,
+              },
+            },
+            image: capturedImage || '',
+          });
+
+          toast.success('Equipment analysis completed!');
+          setIsAnalyzing(false);
+          setCurrentJobId(null);
+        } else if (result.status === 'failed') {
+          // Analysis failed
+          throw new Error(result.error_message || 'Analysis failed');
+        } else if (result.status === 'pending' || result.status === 'processing') {
+          // Still processing, continue polling
+          if (retries < maxRetries) {
+            retries++;
+            setTimeout(checkStatus, 2000); // Check again in 2 seconds
+          } else {
+            throw new Error('Analysis timed out. Please try again.');
+          }
+        }
+      } catch (err) {
+        console.error('Error checking analysis status:', err);
+        const errorMessage = err instanceof Error ? err.message : 'Failed to check analysis status';
+        setError(errorMessage);
+        toast.error(errorMessage);
+        setIsAnalyzing(false);
+        setCurrentJobId(null);
+      }
+    };
+
+    await checkStatus();
+  }, [addAnalysisResult, capturedImage]);
+
   // Handle image analysis
   const analyzeImage = useCallback(async (imageData: string, fileName: string) => {
     setIsAnalyzing(true);
     setError(null);
+    setEquipmentItems([]);
+    setAnalysisMetadata(null);
+    setAnalysisResult(null);
     setCapturedImage(`data:image/jpeg;base64,${imageData}`);
     setImageFileName(fileName);
+    setAnalysisStatus('pending');
 
     try {
-      const result = await analysisApi.analyzeImage(imageData);
+      // Start analysis job
+      const jobResponse: AnalysisJobResponse = await analysisApi.analyzeImage(imageData);
       
-      // Transform API response to match our interface
-      const analysisResult: AnalysisResult = {
-        item_type: result.item_type || 'Unknown Equipment',
-        description: result.description || 'Equipment detected',
-        condition: result.condition || 'Good',
-        weight: result.weight,
-        confidence: result.confidence || 0.8,
-        suggestions: {
-          asset_tag: result.suggested_tag,
-          location: result.suggested_location,
-          notes: result.notes,
-        },
-      };
+      setCurrentJobId(jobResponse.job_id);
+      toast.success('Analysis job created. Processing image...');
 
-      setAnalysisResult(analysisResult);
-      
-      // Store in global state for potential use
-      addAnalysisResult({
-        id: Date.now().toString(),
-        timestamp: new Date().toISOString(),
-        result: analysisResult,
-        image: `data:image/jpeg;base64,${imageData}`,
-      });
-
-      toast.success('Equipment analyzed successfully!');
+      // Start polling for results
+      await pollAnalysisResult(jobResponse.job_id);
       
     } catch (err) {
       console.error('Analysis error:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to analyze image';
       setError(errorMessage);
       toast.error(errorMessage);
-    } finally {
       setIsAnalyzing(false);
+      setCurrentJobId(null);
     }
-  }, [addAnalysisResult]);
+  }, [pollAnalysisResult]);
 
   // Handle camera capture
   const handleCameraCapture = useCallback((imageData: string) => {
@@ -132,7 +229,37 @@ const EquipmentScanner: React.FC = () => {
     setImageFileName('');
   }, []);
 
-  // Navigate to register with pre-filled data
+  // Reset scanner
+  const resetScannerComplete = useCallback(() => {
+    setAnalysisResult(null);
+    setEquipmentItems([]);
+    setAnalysisMetadata(null);
+    setError(null);
+    setCapturedImage(null);
+    setImageFileName('');
+    setCurrentJobId(null);
+    setAnalysisStatus('');
+  }, []);
+
+  // Navigate to register with pre-filled data for a specific equipment item
+  const registerSingleEquipment = useCallback((equipment: EquipmentItem) => {
+    navigate('/register', {
+      state: {
+        analysisData: {
+          item_type: equipment.type,
+          description: equipment.description,
+          condition: equipment.condition,
+          weight: equipment.weight,
+          suggested_tag: equipment.suggested_asset_tag,
+          suggested_location: equipment.location_in_image,
+          notes: `Location in image: ${equipment.location_in_image}`,
+        },
+        capturedImage,
+      },
+    });
+  }, [capturedImage, navigate]);
+
+  // Navigate to register with pre-filled data (legacy function for backward compatibility)
   const registerEquipment = useCallback(() => {
     if (!analysisResult) return;
 
@@ -180,7 +307,7 @@ const EquipmentScanner: React.FC = () => {
           sx={{ mb: 3 }}
           onClose={() => setError(null)}
           action={
-            <Button color="inherit" size="small" onClick={resetScanner}>
+            <Button color="inherit" size="small" onClick={resetScannerComplete}>
               Try Again
             </Button>
           }
@@ -204,152 +331,233 @@ const EquipmentScanner: React.FC = () => {
         </Paper>
       )}
 
-      {/* Analysis Results */}
-      {analysisResult && !isAnalyzing && (
+      {/* Analysis Progress with Status */}
+      {isAnalyzing && (
         <Paper sx={{ p: 3, mb: 3 }}>
-          <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={2}>
+          <Box textAlign="center">
+            <Typography variant="h6" gutterBottom>
+              {analysisStatus === 'pending' ? 'Starting Analysis...' :
+               analysisStatus === 'processing' ? 'Processing Image...' :
+               'Analyzing Equipment...'}
+            </Typography>
+            <LinearProgress sx={{ mb: 2 }} />
+            <Typography variant="body2" color="text.secondary">
+              {currentJobId && (
+                <>Job ID: {currentJobId}<br /></>
+              )}
+              Our AI is identifying the equipment and analyzing their properties
+            </Typography>
+          </Box>
+        </Paper>
+      )}
+
+      {/* Equipment Analysis Results */}
+      {equipmentItems.length > 0 && !isAnalyzing && (
+        <Paper sx={{ p: 3, mb: 3 }}>
+          <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={3}>
             <Typography variant="h6">
-              Analysis Results
+              Equipment Analysis Results
             </Typography>
             <Box display="flex" gap={1}>
               <Tooltip title="Analyze another image">
-                <IconButton size="small" onClick={resetScanner}>
+                <IconButton size="small" onClick={resetScannerComplete}>
                   <RefreshIcon />
                 </IconButton>
               </Tooltip>
             </Box>
           </Box>
 
-          <Grid container spacing={3}>
-            {/* Image Preview */}
-            {capturedImage && (
-              <Grid item xs={12} md={4}>
-                <Box
-                  sx={{
-                    width: '100%',
-                    height: 200,
-                    borderRadius: 1,
-                    overflow: 'hidden',
-                    bgcolor: 'grey.100',
-                  }}
-                >
-                  <img
-                    src={capturedImage}
-                    alt="Analyzed equipment"
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover',
-                    }}
-                  />
-                </Box>
-              </Grid>
-            )}
-
-            {/* Analysis Details */}
-            <Grid item xs={12} md={capturedImage ? 8 : 12}>
-              <Box>
-                {/* Confidence Score */}
-                <Box display="flex" alignItems="center" gap={2} mb={2}>
+          {/* Analysis Metadata */}
+          {analysisMetadata && (
+            <Box mb={3}>
+              <Grid container spacing={2}>
+                <Grid item xs={6} sm={3}>
                   <Typography variant="body2" color="text.secondary">
-                    Confidence:
+                    Total Items
+                  </Typography>
+                  <Typography variant="h6">
+                    {analysisMetadata.totalItems}
+                  </Typography>
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                  <Typography variant="body2" color="text.secondary">
+                    Image Quality
                   </Typography>
                   <Chip
-                    label={`${Math.round(analysisResult.confidence * 100)}%`}
-                    color={getConfidenceColor(analysisResult.confidence)}
+                    label={analysisMetadata.imageQuality}
+                    color={
+                      analysisMetadata.imageQuality.toLowerCase() === 'excellent' ? 'success' :
+                      analysisMetadata.imageQuality.toLowerCase() === 'good' ? 'primary' :
+                      'warning'
+                    }
                     size="small"
                   />
-                </Box>
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                  <Typography variant="body2" color="text.secondary">
+                    Confidence
+                  </Typography>
+                  <Chip
+                    label={`${Math.round(analysisMetadata.confidenceScore * 100)}%`}
+                    color={getConfidenceColor(analysisMetadata.confidenceScore)}
+                    size="small"
+                  />
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                  <Typography variant="body2" color="text.secondary">
+                    Processing Time
+                  </Typography>
+                  <Typography variant="body1">
+                    {analysisMetadata.processingTime.toFixed(1)}s
+                  </Typography>
+                </Grid>
+              </Grid>
 
-                {/* Equipment Details */}
-                <Box mb={2}>
+              {analysisMetadata.recommendations && (
+                <Box mt={2}>
                   <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                    Equipment Type
+                    AI Recommendations
                   </Typography>
-                  <Typography variant="body1" gutterBottom>
-                    {analysisResult.item_type}
-                  </Typography>
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    {analysisMetadata.recommendations}
+                  </Alert>
                 </Box>
+              )}
+            </Box>
+          )}
 
-                <Box mb={2}>
-                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                    Description
-                  </Typography>
-                  <Typography variant="body1" gutterBottom>
-                    {analysisResult.description}
-                  </Typography>
-                </Box>
+          <Divider sx={{ mb: 3 }} />
 
-                <Box display="flex" gap={4} mb={2}>
-                  <Box>
-                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                      Condition
+          {/* Image Preview */}
+          {capturedImage && (
+            <Box mb={3}>
+              <Typography variant="subtitle1" gutterBottom>
+                Analyzed Image
+              </Typography>
+              <Box
+                sx={{
+                  width: '100%',
+                  maxWidth: 400,
+                  height: 250,
+                  borderRadius: 1,
+                  overflow: 'hidden',
+                  bgcolor: 'grey.100',
+                  mx: 'auto',
+                }}
+              >
+                <img
+                  src={capturedImage}
+                  alt="Analyzed equipment"
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                  }}
+                />
+              </Box>
+            </Box>
+          )}
+
+          {/* Equipment Items List */}
+          <Typography variant="h6" gutterBottom>
+            Detected Equipment ({equipmentItems.length} items)
+          </Typography>
+          
+          <Grid container spacing={2}>
+            {equipmentItems.map((equipment, index) => (
+              <Grid item xs={12} sm={6} md={4} key={index}>
+                <Card 
+                  variant="outlined" 
+                  sx={{ 
+                    height: '100%', 
+                    display: 'flex', 
+                    flexDirection: 'column',
+                    transition: 'all 0.2s',
+                    '&:hover': {
+                      boxShadow: 2,
+                      transform: 'translateY(-2px)',
+                    }
+                  }}
+                >
+                  <CardContent sx={{ flexGrow: 1 }}>
+                    <Typography variant="h6" gutterBottom>
+                      {equipment.type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
                     </Typography>
-                    <Chip
-                      label={analysisResult.condition}
-                      color={
-                        analysisResult.condition.toLowerCase() === 'excellent' ? 'success' :
-                        analysisResult.condition.toLowerCase() === 'good' ? 'primary' :
-                        analysisResult.condition.toLowerCase() === 'fair' ? 'warning' : 'error'
-                      }
-                      size="small"
-                    />
-                  </Box>
+                    
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      {equipment.description}
+                    </Typography>
 
-                  {analysisResult.weight && (
-                    <Box>
-                      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                        Weight
+                    {equipment.weight && (
+                      <Box display="flex" alignItems="center" gap={1} mb={1}>
+                        <Typography variant="body2" fontWeight="bold">
+                          Weight:
+                        </Typography>
+                        <Typography variant="body2">
+                          {equipment.weight}
+                        </Typography>
+                      </Box>
+                    )}
+
+                    <Box display="flex" alignItems="center" gap={1} mb={1}>
+                      <Typography variant="body2" fontWeight="bold">
+                        Condition:
                       </Typography>
-                      <Typography variant="body1">
-                        {analysisResult.weight}
+                      <Chip
+                        label={equipment.condition}
+                        color={
+                          equipment.condition.toLowerCase() === 'excellent' ? 'success' :
+                          equipment.condition.toLowerCase() === 'good' ? 'primary' :
+                          equipment.condition.toLowerCase() === 'fair' ? 'warning' : 'error'
+                        }
+                        size="small"
+                      />
+                    </Box>
+
+                    <Box mb={1}>
+                      <Typography variant="body2" fontWeight="bold" gutterBottom>
+                        Location in Image:
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {equipment.location_in_image}
                       </Typography>
                     </Box>
-                  )}
-                </Box>
 
-                {/* Suggestions */}
-                {(analysisResult.suggestions.asset_tag || 
-                  analysisResult.suggestions.location || 
-                  analysisResult.suggestions.notes) && (
-                  <Box>
-                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                      AI Suggestions
-                    </Typography>
-                    {analysisResult.suggestions.asset_tag && (
-                      <Typography variant="body2" gutterBottom>
-                        • Suggested Tag: {analysisResult.suggestions.asset_tag}
+                    <Box mb={2}>
+                      <Typography variant="body2" fontWeight="bold" gutterBottom>
+                        Suggested Asset Tag:
                       </Typography>
-                    )}
-                    {analysisResult.suggestions.location && (
-                      <Typography variant="body2" gutterBottom>
-                        • Suggested Location: {analysisResult.suggestions.location}
+                      <Typography variant="body2" color="primary" fontFamily="monospace">
+                        {equipment.suggested_asset_tag}
                       </Typography>
-                    )}
-                    {analysisResult.suggestions.notes && (
-                      <Typography variant="body2" gutterBottom>
-                        • Notes: {analysisResult.suggestions.notes}
-                      </Typography>
-                    )}
+                    </Box>
+                  </CardContent>
+
+                  <Box p={2} pt={0}>
+                    <Button
+                      variant="contained"
+                      fullWidth
+                      onClick={() => registerSingleEquipment(equipment)}
+                      startIcon={<SaveIcon />}
+                      sx={{
+                        backgroundColor: 'primary.main',
+                        '&:hover': {
+                          backgroundColor: 'primary.dark',
+                        }
+                      }}
+                    >
+                      Add to Register
+                    </Button>
                   </Box>
-                )}
-              </Box>
-            </Grid>
+                </Card>
+              </Grid>
+            ))}
           </Grid>
 
           <Divider sx={{ my: 3 }} />
 
           {/* Action Buttons */}
           <Box display="flex" gap={2} justifyContent="center" flexWrap="wrap">
-            <Button
-              variant="contained"
-              size="large"
-              onClick={registerEquipment}
-              startIcon={<SaveIcon />}
-            >
-              Register Equipment
-            </Button>
-            
             <Button
               variant="outlined"
               size="large"
@@ -362,7 +570,7 @@ const EquipmentScanner: React.FC = () => {
             <Button
               variant="outlined"
               size="large"
-              onClick={resetScanner}
+              onClick={resetScannerComplete}
               startIcon={<RefreshIcon />}
             >
               Scan Another
@@ -372,7 +580,7 @@ const EquipmentScanner: React.FC = () => {
       )}
 
       {/* Upload Interface */}
-      {!analysisResult && !isAnalyzing && (
+      {equipmentItems.length === 0 && !isAnalyzing && (
         <Paper sx={{ p: 3 }}>
           <ImageUpload
             onImageSelect={handleImageUpload}
@@ -384,7 +592,7 @@ const EquipmentScanner: React.FC = () => {
       )}
 
       {/* Quick Actions */}
-      {!analysisResult && !isAnalyzing && (
+      {equipmentItems.length === 0 && !isAnalyzing && (
         <Box mt={4} textAlign="center">
           <Typography variant="h6" gutterBottom>
             Quick Actions
