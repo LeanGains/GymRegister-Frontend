@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Asset, AnalysisResult } from '../store/assetStore';
+import { Asset } from '../store/assetStore';
 
 // Create axios instance with base configuration
 const api = axios.create({

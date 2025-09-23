@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Box,
   Card,
@@ -24,13 +24,19 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon,
   LocationOn as LocationIcon,
+  Refresh as RefreshIcon,
 } from '@mui/icons-material';
 import toast from 'react-hot-toast';
 
 import { useAssetStore, Asset } from '../store/assetStore';
+import { assetApi } from '../services/api';
 
 const ViewAssets: React.FC = () => {
-  const { assets, updateAsset, deleteAsset } = useAssetStore();
+  const { deleteAsset, loading, setLoading, error, setError } = useAssetStore();
+  
+  // Local state for API-fetched assets
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [isInitialized, setIsInitialized] = useState(false);
   
   const [filters, setFilters] = useState({
     type: 'All',
@@ -38,6 +44,33 @@ const ViewAssets: React.FC = () => {
     location: '',
     condition: 'All',
   });
+
+  // Fetch assets from API
+  const fetchAssets = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const fetchedAssets = await assetApi.getAssets();
+      setAssets(fetchedAssets);
+    } catch (err: any) {
+      console.error('Error fetching assets:', err);
+      const errorMessage = err.response?.data?.message || 
+                          err.message || 
+                          'Failed to fetch assets from API';
+      setError(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Initialize component and fetch assets
+  useEffect(() => {
+    if (!isInitialized) {
+      fetchAssets();
+      setIsInitialized(true);
+    }
+  }, [fetchAssets, isInitialized]);
 
   // Get unique values for filter options
   const filterOptions = useMemo(() => {
@@ -97,11 +130,32 @@ const ViewAssets: React.FC = () => {
     toast.success('Assets exported successfully!');
   };
 
-  const handleDelete = (asset: Asset) => {
+  const handleDelete = async (asset: Asset) => {
     if (window.confirm(`Are you sure you want to delete asset ${asset.asset_tag}?`)) {
-      deleteAsset(asset.id);
-      toast.success(`Asset ${asset.asset_tag} deleted successfully!`);
+      setLoading(true);
+      try {
+        await assetApi.deleteAsset(asset.asset_tag);
+        // Remove from local state
+        setAssets(prev => prev.filter(a => a.id !== asset.id));
+        // Also remove from store for consistency
+        deleteAsset(asset.id);
+        toast.success(`Asset ${asset.asset_tag} deleted successfully!`);
+      } catch (err: any) {
+        console.error('Error deleting asset:', err);
+        const errorMessage = err.response?.data?.message || 
+                            err.message || 
+                            'Failed to delete asset';
+        setError(errorMessage);
+        toast.error(errorMessage);
+      } finally {
+        setLoading(false);
+      }
     }
+  };
+
+  const handleRefresh = () => {
+    fetchAssets();
+    toast.success('Assets refreshed!');
   };
 
   const getStatusColor = (status: string) => {
@@ -235,15 +289,53 @@ const ViewAssets: React.FC = () => {
         <Typography variant="h4" component="h1">
           All Assets
         </Typography>
-        <Button
-          variant="contained"
-          startIcon={<DownloadIcon />}
-          onClick={handleExport}
-          disabled={filteredAssets.length === 0}
-        >
-          Export CSV
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            variant="outlined"
+            startIcon={<RefreshIcon />}
+            onClick={handleRefresh}
+            disabled={loading}
+          >
+            Refresh
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<DownloadIcon />}
+            onClick={handleExport}
+            disabled={filteredAssets.length === 0 || loading}
+          >
+            Export CSV
+          </Button>
+        </Box>
       </Box>
+
+      {/* Error Display */}
+      {error && (
+        <Alert 
+          severity="error" 
+          sx={{ mb: 3 }}
+          onClose={() => setError(null)}
+          action={
+            <Button 
+              color="inherit" 
+              size="small" 
+              onClick={handleRefresh}
+              disabled={loading}
+            >
+              Retry
+            </Button>
+          }
+        >
+          {error}
+        </Alert>
+      )}
+
+      {/* Loading State */}
+      {loading && !assets.length && (
+        <Alert severity="info" sx={{ mb: 3 }}>
+          Loading assets from API...
+        </Alert>
+      )}
 
       {/* Filters */}
       <Card sx={{ mb: 3 }}>
@@ -325,6 +417,7 @@ const ViewAssets: React.FC = () => {
           <DataGrid
             rows={filteredAssets}
             columns={columns}
+            loading={loading}
             initialState={{
               pagination: {
                 paginationModel: { page: 0, pageSize: 25 },
@@ -357,7 +450,7 @@ const ViewAssets: React.FC = () => {
         </CardContent>
       </Card>
 
-      {assets.length === 0 && (
+      {assets.length === 0 && !loading && !error && (
         <Alert severity="info" sx={{ mt: 3 }}>
           No assets found. Use the Equipment Scanner or Register Asset page to add some!
         </Alert>

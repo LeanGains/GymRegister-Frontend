@@ -14,21 +14,23 @@ import {
   Grid,
   IconButton,
   Tooltip,
+  CircularProgress,
 } from '@mui/material';
 import {
   PhotoCamera as CameraIcon,
-  Upload as UploadIcon,
   AutoAwesome as AIIcon,
   Refresh as RefreshIcon,
   Save as SaveIcon,
   Edit as EditIcon,
+  CheckCircle as CheckIcon,
+  Error as ErrorIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
 import CameraCapture from '../components/Camera/CameraCapture';
 import ImageUpload from '../components/Upload/ImageUpload';
-import { analysisApi } from '../services/api';
+import { analysisApi, assetApi } from '../services/api';
 import { useAssetStore } from '../store/assetStore';
 import ImageAnalysisUtils, { ImageQualityMetrics } from '../utils/imageAnalysisUtils';
 
@@ -82,7 +84,7 @@ interface AnalysisResult {
 
 const EquipmentScanner: React.FC = () => {
   const navigate = useNavigate();
-  const { addAnalysisResult } = useAssetStore();
+  const { addAnalysisResult, addAsset, getAssetByTag, addRegisteredItem } = useAssetStore();
   
   // State management
   const [showCamera, setShowCamera] = useState(false);
@@ -104,6 +106,11 @@ const EquipmentScanner: React.FC = () => {
   const [analysisStatus, setAnalysisStatus] = useState<string>('');
   const [imageQualityMetrics, setImageQualityMetrics] = useState<ImageQualityMetrics | null>(null);
   const [preAnalysisTime, setPreAnalysisTime] = useState<number>(0);
+
+  // Registration state management
+  const [registeringItems, setRegisteringItems] = useState<Set<string>>(new Set());
+  const [registeredItemsLocal, setRegisteredItemsLocal] = useState<Set<string>>(new Set());
+  const [failedItems, setFailedItems] = useState<Set<string>>(new Set());
 
   // Poll for analysis results
   const pollAnalysisResult = useCallback(async (jobId: string): Promise<void> => {
@@ -184,6 +191,10 @@ const EquipmentScanner: React.FC = () => {
     setImageFileName(fileName);
     setAnalysisStatus('pending');
     setImageQualityMetrics(null);
+    // Clear registration states when starting new analysis
+    setRegisteringItems(new Set());
+    setRegisteredItemsLocal(new Set());
+    setFailedItems(new Set());
 
     try {
       // Perform client-side image quality analysis
@@ -262,14 +273,6 @@ const EquipmentScanner: React.FC = () => {
     setShowCamera(false);
   }, []);
 
-  // Reset scanner
-  const resetScanner = useCallback(() => {
-    setAnalysisResult(null);
-    setError(null);
-    setCapturedImage(null);
-    setImageFileName('');
-  }, []);
-
   // Reset scanner completely
   const resetScannerComplete = useCallback(() => {
     setAnalysisResult(null);
@@ -282,7 +285,136 @@ const EquipmentScanner: React.FC = () => {
     setAnalysisStatus('');
     setImageQualityMetrics(null);
     setPreAnalysisTime(0);
+    setRegisteringItems(new Set());
+    setRegisteredItemsLocal(new Set());
+    setFailedItems(new Set());
   }, []);
+
+    // Add equipment item directly to register
+    const addEquipmentToRegister = useCallback(async (equipment: EquipmentItem, index: number) => {
+        const itemKey = `${equipment.suggested_asset_tag}-${index}`;
+
+        // Check if already registered
+        if (registeredItemsLocal.has(itemKey) || getAssetByTag(equipment.suggested_asset_tag)) {
+            toast.error('This item has already been registered');
+            return;
+        }
+
+        // Check if already registering
+        if (registeringItems.has(itemKey)) {
+            return;
+        }
+
+        try {
+            // Add to registering set
+            setRegisteringItems(prev => new Set([...prev, itemKey]));
+            setFailedItems(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(itemKey);
+                return newSet;
+            });
+            const conditionMapping: { [key: string]: string } = {
+                excellent: 'Excellent',
+                good: 'Good',
+                fair: 'Fair',
+                poor: 'Poor',
+                'needs repair': 'Needs Repair',
+            };
+
+            const mappedCondition = conditionMapping[equipment.condition];
+            // Prepare asset data
+            const assetData = {
+                asset_tag: equipment.suggested_asset_tag,
+                item_type: equipment.type,
+                description: equipment.description,
+                location: equipment.location_in_image || 'Scanned Location',
+                weight: equipment.weight,
+                condition: mappedCondition,
+                notes: `Added via AI Equipment Scanner. ${equipment.location_in_image ? `Location in image: ${equipment.location_in_image}` : ''}`,
+            };
+            // Call API to register asset
+            await assetApi.createAsset(assetData);
+
+            // Update state
+            setRegisteredItemsLocal(prev => new Set([...prev, itemKey]));
+            addRegisteredItem(itemKey);
+
+            // Show success message
+            toast.success(`${equipment.type} (${equipment.suggested_asset_tag}) registered successfully!`);
+
+        } catch (error: any) {
+            console.error('Registration error:', error);
+
+            // Add to failed items
+            setFailedItems(prev => new Set([...prev, itemKey]));
+
+            // Handle specific error types
+            let errorMessage = 'Failed to register equipment';
+            if (error.response?.status === 409) {
+                errorMessage = 'Asset tag already exists';
+            } else if (error.response?.status === 400) {
+                errorMessage = 'Invalid equipment data';
+            } else if (error.response?.data?.message) {
+                errorMessage = error.response.data.message;
+            } else if (error.message) {
+                errorMessage = error.message;
+            }
+
+            toast.error(`Failed to register ${equipment.type}: ${errorMessage}`);
+        } finally {
+            // Remove from registering set
+            setRegisteringItems(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(itemKey);
+                return newSet;
+            });
+        }
+    }, [getAssetByTag, registeringItems, registeredItemsLocal, addRegisteredItem]);
+
+  // Register all equipment items at once
+  const registerAllEquipment = useCallback(async () => {
+    if (equipmentItems.length === 0) return;
+
+    const unregisteredItems = equipmentItems.filter((_, index) => {
+      const itemKey = `${equipmentItems[index].suggested_asset_tag}-${index}`;
+      return !registeredItemsLocal.has(itemKey) && !getAssetByTag(equipmentItems[index].suggested_asset_tag);
+    });
+
+    if (unregisteredItems.length === 0) {
+      toast.success('All items have already been registered');
+      return;
+    }
+
+    toast.success(`Registering ${unregisteredItems.length} equipment items...`);
+
+    // Register items sequentially to avoid overwhelming the API
+    for (let i = 0; i < equipmentItems.length; i++) {
+      const equipment = equipmentItems[i];
+      const itemKey = `${equipment.suggested_asset_tag}-${i}`;
+      
+      if (!registeredItemsLocal.has(itemKey) && !getAssetByTag(equipment.suggested_asset_tag)) {
+        await addEquipmentToRegister(equipment, i);
+        // Add small delay between requests
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+  }, [equipmentItems, registeredItemsLocal, getAssetByTag, addEquipmentToRegister]);
+
+  // Get registration status for an item
+  const getItemRegistrationStatus = useCallback((equipment: EquipmentItem, index: number) => {
+    const itemKey = `${equipment.suggested_asset_tag}-${index}`;
+    const existingAsset = getAssetByTag(equipment.suggested_asset_tag);
+    
+    if (existingAsset || registeredItemsLocal.has(itemKey)) {
+      return 'registered';
+    } else if (registeringItems.has(itemKey)) {
+      return 'registering';
+    } else if (failedItems.has(itemKey)) {
+      return 'failed';
+    } else {
+      return 'unregistered';
+    }
+  }, [getAssetByTag, registeredItemsLocal, registeringItems, failedItems]);
 
   // Navigate to register with pre-filled data for a specific equipment item
   const registerSingleEquipment = useCallback((equipment: EquipmentItem) => {
@@ -301,27 +433,6 @@ const EquipmentScanner: React.FC = () => {
       },
     });
   }, [capturedImage, navigate]);
-
-  // Navigate to register with pre-filled data (legacy function for backward compatibility)
-  const registerEquipment = useCallback(() => {
-    if (!analysisResult) return;
-
-    // Navigate to register page with analysis data
-    navigate('/register', {
-      state: {
-        analysisData: {
-          item_type: analysisResult.item_type,
-          description: analysisResult.description,
-          condition: analysisResult.condition,
-          weight: analysisResult.weight,
-          suggested_tag: analysisResult.suggestions.asset_tag,
-          suggested_location: analysisResult.suggestions.location,
-          notes: analysisResult.suggestions.notes,
-        },
-        capturedImage,
-      },
-    });
-  }, [analysisResult, capturedImage, navigate]);
 
   // Get confidence color
   const getConfidenceColor = (confidence: number) => {
@@ -570,102 +681,276 @@ const EquipmentScanner: React.FC = () => {
           )}
 
           {/* Equipment Items List */}
-          <Typography variant="h6" gutterBottom>
-            Detected Equipment ({equipmentItems.length} items)
-          </Typography>
+          <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+            <Typography variant="h6">
+              Detected Equipment ({equipmentItems.length} items)
+            </Typography>
+            <Button
+              variant="contained"
+              onClick={registerAllEquipment}
+              startIcon={<SaveIcon />}
+              disabled={equipmentItems.every((equipment, index) => 
+                getItemRegistrationStatus(equipment, index) !== 'unregistered'
+              )}
+              sx={{ ml: 2 }}
+            >
+              Register All Items
+            </Button>
+          </Box>
           
           <Grid container spacing={2}>
-            {equipmentItems.map((equipment, index) => (
-              <Grid item xs={12} sm={6} md={4} key={index}>
-                <Card 
-                  variant="outlined" 
-                  sx={{ 
-                    height: '100%', 
-                    display: 'flex', 
-                    flexDirection: 'column',
-                    transition: 'all 0.2s',
-                    '&:hover': {
-                      boxShadow: 2,
-                      transform: 'translateY(-2px)',
-                    }
-                  }}
-                >
-                  <CardContent sx={{ flexGrow: 1 }}>
-                    <Typography variant="h6" gutterBottom>
-                      {equipment.type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                    </Typography>
-                    
-                    <Typography variant="body2" color="text.secondary" gutterBottom>
-                      {equipment.description}
-                    </Typography>
+            {equipmentItems.map((equipment, index) => {
+              const registrationStatus = getItemRegistrationStatus(equipment, index);
+              const itemKey = `${equipment.suggested_asset_tag}-${index}`;
+              console.log(itemKey, registrationStatus);
+              return (
+                <Grid item xs={12} sm={6} md={4} key={index}>
+                  <Card 
+                    variant="outlined" 
+                    sx={{ 
+                      height: '100%', 
+                      display: 'flex', 
+                      flexDirection: 'column',
+                      transition: 'all 0.2s',
+                      opacity: registrationStatus === 'registered' ? 0.7 : 1,
+                      border: registrationStatus === 'registered' ? '2px solid' : '1px solid',
+                      borderColor: registrationStatus === 'registered' ? 'success.main' : 'grey.300',
+                      '&:hover': registrationStatus !== 'registered' ? {
+                        boxShadow: 2,
+                        transform: 'translateY(-2px)',
+                      } : {},
+                    }}
+                  >
+                    <CardContent sx={{ flexGrow: 1 }}>
+                      <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={1}>
+                        <Typography variant="h6">
+                          {equipment.type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                        </Typography>
+                        {registrationStatus === 'registered' && (
+                          <Chip
+                            icon={<CheckIcon />}
+                            label="Registered"
+                            color="success"
+                            size="small"
+                            variant="outlined"
+                          />
+                        )}
+                        {registrationStatus === 'failed' && (
+                          <Chip
+                            icon={<ErrorIcon />}
+                            label="Failed"
+                            color="error"
+                            size="small"
+                            variant="outlined"
+                          />
+                        )}
+                      </Box>
+                      
+                      <Typography variant="body2" color="text.secondary" gutterBottom>
+                        {equipment.description}
+                      </Typography>
 
-                    {equipment.weight && (
+                      {equipment.weight && (
+                        <Box display="flex" alignItems="center" gap={1} mb={1}>
+                          <Typography variant="body2" fontWeight="bold">
+                            Weight:
+                          </Typography>
+                          <Typography variant="body2">
+                            {equipment.weight}
+                          </Typography>
+                        </Box>
+                      )}
+
                       <Box display="flex" alignItems="center" gap={1} mb={1}>
                         <Typography variant="body2" fontWeight="bold">
-                          Weight:
+                          Condition:
                         </Typography>
-                        <Typography variant="body2">
-                          {equipment.weight}
+                        <Chip
+                          label={equipment.condition}
+                          color={
+                            equipment.condition.toLowerCase() === 'excellent' ? 'success' :
+                            equipment.condition.toLowerCase() === 'good' ? 'primary' :
+                            equipment.condition.toLowerCase() === 'fair' ? 'warning' : 'error'
+                          }
+                          size="small"
+                        />
+                      </Box>
+
+                      <Box mb={1}>
+                        <Typography variant="body2" fontWeight="bold" gutterBottom>
+                          Location in Image:
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {equipment.location_in_image}
                         </Typography>
                       </Box>
-                    )}
 
-                    <Box display="flex" alignItems="center" gap={1} mb={1}>
-                      <Typography variant="body2" fontWeight="bold">
-                        Condition:
-                      </Typography>
-                      <Chip
-                        label={equipment.condition}
-                        color={
-                          equipment.condition.toLowerCase() === 'excellent' ? 'success' :
-                          equipment.condition.toLowerCase() === 'good' ? 'primary' :
-                          equipment.condition.toLowerCase() === 'fair' ? 'warning' : 'error'
-                        }
-                        size="small"
-                      />
+                      <Box mb={2}>
+                        <Typography variant="body2" fontWeight="bold" gutterBottom>
+                          Suggested Asset Tag:
+                        </Typography>
+                        <Typography variant="body2" color="primary" fontFamily="monospace">
+                          {equipment.suggested_asset_tag}
+                        </Typography>
+                      </Box>
+                    </CardContent>
+
+                    <Box p={2} pt={0}>
+                      {registrationStatus === 'registered' ? (
+                        <Button
+                          variant="outlined"
+                          fullWidth
+                          disabled
+                          startIcon={<CheckIcon />}
+                          color="success"
+                        >
+                          Already Registered
+                        </Button>
+                      ) : registrationStatus === 'registering' ? (
+                        <Button
+                          variant="outlined"
+                          fullWidth
+                          disabled
+                          startIcon={<CircularProgress size={16} />}
+                        >
+                          Registering...
+                        </Button>
+                      ) : registrationStatus === 'failed' ? (
+                        <Box display="flex" gap={1}>
+                          <Button
+                            variant="outlined"
+                            color="error"
+                            onClick={() => addEquipmentToRegister(equipment, index)}
+                            startIcon={<RefreshIcon />}
+                            sx={{ flex: 1 }}
+                          >
+                            Retry
+                          </Button>
+                          <Button
+                            variant="outlined"
+                            onClick={() => registerSingleEquipment(equipment)}
+                            startIcon={<EditIcon />}
+                            sx={{ flex: 1 }}
+                          >
+                            Edit
+                          </Button>
+                        </Box>
+                      ) : (
+                        <Box display="flex" gap={1}>
+                          <Button
+                            variant="contained"
+                            onClick={() => addEquipmentToRegister(equipment, index)}
+                            startIcon={<SaveIcon />}
+                            sx={{
+                              flex: 1,
+                              backgroundColor: 'primary.main',
+                              '&:hover': {
+                                backgroundColor: 'primary.dark',
+                              }
+                            }}
+                          >
+                            Add to Register
+                          </Button>
+                          <Button
+                            variant="outlined"
+                            onClick={() => registerSingleEquipment(equipment)}
+                            startIcon={<EditIcon />}
+                            sx={{ minWidth: 'auto', px: 1 }}
+                          >
+                            <EditIcon />
+                          </Button>
+                        </Box>
+                      )}
                     </Box>
-
-                    <Box mb={1}>
-                      <Typography variant="body2" fontWeight="bold" gutterBottom>
-                        Location in Image:
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {equipment.location_in_image}
-                      </Typography>
-                    </Box>
-
-                    <Box mb={2}>
-                      <Typography variant="body2" fontWeight="bold" gutterBottom>
-                        Suggested Asset Tag:
-                      </Typography>
-                      <Typography variant="body2" color="primary" fontFamily="monospace">
-                        {equipment.suggested_asset_tag}
-                      </Typography>
-                    </Box>
-                  </CardContent>
-
-                  <Box p={2} pt={0}>
-                    <Button
-                      variant="contained"
-                      fullWidth
-                      onClick={() => registerSingleEquipment(equipment)}
-                      startIcon={<SaveIcon />}
-                      sx={{
-                        backgroundColor: 'primary.main',
-                        '&:hover': {
-                          backgroundColor: 'primary.dark',
-                        }
-                      }}
-                    >
-                      Add to Register
-                    </Button>
-                  </Box>
-                </Card>
-              </Grid>
-            ))}
+                  </Card>
+                </Grid>
+              );
+            })}
           </Grid>
 
           <Divider sx={{ my: 3 }} />
+
+          {/* Registration Summary */}
+          <Box mb={3}>
+            <Typography variant="h6" gutterBottom>
+              Registration Summary
+            </Typography>
+            <Grid container spacing={2}>
+              <Grid item xs={6} sm={3}>
+                <Box textAlign="center" p={2} bgcolor="success.light" borderRadius={1}>
+                  <Typography variant="h4" color="success.dark">
+                    {equipmentItems.filter((equipment, index) => 
+                      getItemRegistrationStatus(equipment, index) === 'registered'
+                    ).length}
+                  </Typography>
+                  <Typography variant="body2" color="success.dark">
+                    Registered
+                  </Typography>
+                </Box>
+              </Grid>
+              <Grid item xs={6} sm={3}>
+                <Box textAlign="center" p={2} bgcolor="warning.light" borderRadius={1}>
+                  <Typography variant="h4" color="warning.dark">
+                    {equipmentItems.filter((equipment, index) => 
+                      getItemRegistrationStatus(equipment, index) === 'registering'
+                    ).length}
+                  </Typography>
+                  <Typography variant="body2" color="warning.dark">
+                    Processing
+                  </Typography>
+                </Box>
+              </Grid>
+              <Grid item xs={6} sm={3}>
+                <Box textAlign="center" p={2} bgcolor="error.light" borderRadius={1}>
+                  <Typography variant="h4" color="error.dark">
+                    {equipmentItems.filter((equipment, index) => 
+                      getItemRegistrationStatus(equipment, index) === 'failed'
+                    ).length}
+                  </Typography>
+                  <Typography variant="body2" color="error.dark">
+                    Failed
+                  </Typography>
+                </Box>
+              </Grid>
+              <Grid item xs={6} sm={3}>
+                <Box textAlign="center" p={2} bgcolor="grey.200" borderRadius={1}>
+                  <Typography variant="h4" color="text.primary">
+                    {equipmentItems.filter((equipment, index) => 
+                      getItemRegistrationStatus(equipment, index) === 'unregistered'
+                    ).length}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Pending
+                  </Typography>
+                </Box>
+              </Grid>
+            </Grid>
+
+            {/* Progress indicator */}
+            <Box mt={2}>
+              <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+                <Typography variant="body2" color="text.secondary">
+                  Registration Progress
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {equipmentItems.filter((equipment, index) => 
+                    getItemRegistrationStatus(equipment, index) === 'registered'
+                  ).length} / {equipmentItems.length}
+                </Typography>
+              </Box>
+              <LinearProgress 
+                variant="determinate" 
+                value={
+                  equipmentItems.length > 0 
+                    ? (equipmentItems.filter((equipment, index) => 
+                        getItemRegistrationStatus(equipment, index) === 'registered'
+                      ).length / equipmentItems.length) * 100 
+                    : 0
+                }
+                sx={{ height: 8, borderRadius: 4 }}
+              />
+            </Box>
+          </Box>
 
           {/* Action Buttons */}
           <Box display="flex" gap={2} justifyContent="center" flexWrap="wrap">
@@ -676,6 +961,15 @@ const EquipmentScanner: React.FC = () => {
               startIcon={<EditIcon />}
             >
               Manual Entry
+            </Button>
+            
+            <Button
+              variant="outlined"
+              size="large"
+              onClick={() => navigate('/assets')}
+              startIcon={<SaveIcon />}
+            >
+              View All Assets
             </Button>
             
             <Button
