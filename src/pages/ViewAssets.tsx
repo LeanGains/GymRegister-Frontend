@@ -417,6 +417,7 @@ const ViewAssets: React.FC = () => {
           <DataGrid
             rows={filteredAssets}
             columns={columns}
+            loading={loading}
             initialState={{
               pagination: {
                 paginationModel: { page: 0, pageSize: 25 },
