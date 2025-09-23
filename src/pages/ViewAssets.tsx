@@ -291,14 +291,24 @@ const ViewAssets: React.FC = () => {
         <Typography variant="h4" component="h1">
           All Assets
         </Typography>
-        <Button
-          variant="contained"
-          startIcon={<DownloadIcon />}
-          onClick={handleExport}
-          disabled={filteredAssets.length === 0}
-        >
-          Export CSV
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            variant="outlined"
+            startIcon={<RefreshIcon />}
+            onClick={handleRefresh}
+            disabled={loading}
+          >
+            Refresh
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<DownloadIcon />}
+            onClick={handleExport}
+            disabled={filteredAssets.length === 0 || loading}
+          >
+            Export CSV
+          </Button>
+        </Box>
       </Box>
 
       {/* Filters */}
