@@ -192,6 +192,10 @@ const EquipmentScanner: React.FC = () => {
     setImageFileName(fileName);
     setAnalysisStatus('pending');
     setImageQualityMetrics(null);
+    // Clear registration states when starting new analysis
+    setRegisteringItems(new Set());
+    setRegisteredItemsLocal(new Set());
+    setFailedItems(new Set());
 
     try {
       // Perform client-side image quality analysis
