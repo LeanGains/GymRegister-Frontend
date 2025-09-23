@@ -29,6 +29,7 @@ import {
 import toast from 'react-hot-toast';
 
 import { useAssetStore, Asset } from '../store/assetStore';
+import { assetApi } from '../services/api';
 
 const ViewAssets: React.FC = () => {
   const { updateAsset, deleteAsset, loading, setLoading, error, setError } = useAssetStore();
