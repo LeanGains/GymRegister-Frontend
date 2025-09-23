@@ -31,6 +31,41 @@ import ImageUpload from '../components/Upload/ImageUpload';
 import { analysisApi } from '../services/api';
 import { useAssetStore } from '../store/assetStore';
 
+interface AnalysisJobResponse {
+  job_id: string;
+  status: string;
+  message: string;
+}
+
+interface EquipmentItem {
+  type: string;
+  weight?: string;
+  description: string;
+  condition: string;
+  suggested_asset_tag: string;
+  location_in_image: string;
+}
+
+interface AnalysisResultResponse {
+  id: string;
+  asset_tag: string | null;
+  original_filename: string;
+  status: string;
+  result: {
+    asset_tags: string[];
+    equipment: EquipmentItem[];
+    image_quality: string;
+    total_items: number;
+    recommendations: string;
+    confidence_score: number;
+  };
+  error_message: string | null;
+  confidence_score: number;
+  created_at: string;
+  completed_at: string;
+  processing_time: number;
+}
+
 interface AnalysisResult {
   item_type: string;
   description: string;
