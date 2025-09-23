@@ -131,11 +131,32 @@ const ViewAssets: React.FC = () => {
     toast.success('Assets exported successfully!');
   };
 
-  const handleDelete = (asset: Asset) => {
+  const handleDelete = async (asset: Asset) => {
     if (window.confirm(`Are you sure you want to delete asset ${asset.asset_tag}?`)) {
-      deleteAsset(asset.id);
-      toast.success(`Asset ${asset.asset_tag} deleted successfully!`);
+      setLoading(true);
+      try {
+        await assetApi.deleteAsset(asset.asset_tag);
+        // Remove from local state
+        setAssets(prev => prev.filter(a => a.id !== asset.id));
+        // Also remove from store for consistency
+        deleteAsset(asset.id);
+        toast.success(`Asset ${asset.asset_tag} deleted successfully!`);
+      } catch (err: any) {
+        console.error('Error deleting asset:', err);
+        const errorMessage = err.response?.data?.message || 
+                            err.message || 
+                            'Failed to delete asset';
+        setError(errorMessage);
+        toast.error(errorMessage);
+      } finally {
+        setLoading(false);
+      }
     }
+  };
+
+  const handleRefresh = () => {
+    fetchAssets();
+    toast.success('Assets refreshed!');
   };
 
   const getStatusColor = (status: string) => {
