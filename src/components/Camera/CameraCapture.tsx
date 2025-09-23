@@ -19,7 +19,7 @@ import {
 } from '@mui/icons-material';
 
 interface CameraCaptureProps {
-    onCapture: (imageData: string) => void;
+    onCapture: (imageData: string, assetTag?: string) => void;
     onClose: () => void;
     isAnalyzing?: boolean;
 }
@@ -140,9 +140,9 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({
             // Convert to base64
             const dataURL = canvas.toDataURL('image/jpeg', 0.8);
             const base64Data = dataURL.split(',')[1];
-
+            const assetTag = '';
             if (base64Data) {
-                onCapture(base64Data);
+                onCapture(base64Data, assetTag);
             } else {
                 setError('Failed to capture image. Please try again.');
             }
