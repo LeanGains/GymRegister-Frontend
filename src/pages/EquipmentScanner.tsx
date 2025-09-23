@@ -307,7 +307,7 @@ const EquipmentScanner: React.FC = () => {
           sx={{ mb: 3 }}
           onClose={() => setError(null)}
           action={
-            <Button color="inherit" size="small" onClick={resetScanner}>
+            <Button color="inherit" size="small" onClick={resetScannerComplete}>
               Try Again
             </Button>
           }
