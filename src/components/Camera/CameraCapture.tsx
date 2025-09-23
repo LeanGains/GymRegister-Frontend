@@ -49,11 +49,26 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({
     const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
     const [videoReady, setVideoReady] = useState(false);
 
-    // Start camera
+    // Enumerate available cameras
+    const enumerateCameras = useCallback(async () => {
+        try {
+            if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const cameras = devices.filter(device => device.kind === 'videoinput');
+                setAvailableCameras(cameras);
+                console.log('Available cameras:', cameras.length);
+            }
+        } catch (err) {
+            console.warn('Could not enumerate cameras:', err);
+        }
+    }, []);
+
+    // Start camera with enhanced error handling
     const startCamera = useCallback(async () => {
         console.log('Starting camera with facingMode:', facingMode);
         setIsLoading(true);
         setError(null);
+        setVideoReady(false);
 
         try {
             // Stop existing stream
@@ -63,17 +78,24 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({
 
             // Check if getUserMedia is supported
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                throw new Error('Camera API not supported in this browser');
+                throw new Error('Camera API not supported in this browser. Please use a modern browser like Chrome, Firefox, or Safari.');
             }
+
+            // Enumerate cameras first
+            await enumerateCameras();
 
             console.log('Requesting camera permission...');
 
-            // Request camera access
+            // Enhanced constraints for better quality
             const constraints = {
                 video: {
                     facingMode: facingMode,
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 }
+                    width: { ideal: 1920, max: 1920 },
+                    height: { ideal: 1080, max: 1080 },
+                    frameRate: { ideal: 30, max: 60 },
+                    focusMode: 'continuous',
+                    whiteBalanceMode: 'auto',
+                    exposureMode: 'continuous',
                 },
                 audio: false
             };
@@ -85,28 +107,82 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({
 
             if (videoRef.current) {
                 videoRef.current.srcObject = stream;
-                videoRef.current.play();
+                
+                // Wait for video metadata to load
+                videoRef.current.onloadedmetadata = () => {
+                    console.log('Video metadata loaded:', {
+                        width: videoRef.current?.videoWidth,
+                        height: videoRef.current?.videoHeight,
+                    });
+                    setVideoReady(true);
+                    setIsLoading(false);
+                };
+
+                await videoRef.current.play();
             }
 
             setHasPermission(true);
-            setIsLoading(false);
 
         } catch (err: any) {
             console.error('Camera error:', err);
             setHasPermission(false);
             setIsLoading(false);
+            setVideoReady(false);
 
+            // Enhanced error messages
             if (err.name === 'NotAllowedError') {
-                setError('Camera access denied. Please allow camera permissions and try again.');
+                setError('Camera access denied. Please click the camera icon in your browser\'s address bar and allow camera access, then try again.');
             } else if (err.name === 'NotFoundError') {
-                setError('No camera found. Please connect a camera and try again.');
+                setError('No camera found on this device. Please connect a camera and refresh the page.');
             } else if (err.name === 'NotReadableError') {
-                setError('Camera is already in use by another application.');
+                setError('Camera is already in use by another application. Please close other camera apps and try again.');
             } else if (err.name === 'OverconstrainedError') {
-                setError('Camera constraints not supported. Trying with different settings...');
+                setError('Camera settings not supported. Trying with basic settings...');
+                // Try with fallback constraints
+                setTimeout(() => startCameraFallback(), 1000);
+                return;
+            } else if (err.name === 'TypeError') {
+                setError('Camera API not available. Please ensure you\'re using HTTPS or localhost.');
             } else {
-                setError(`Failed to access camera: ${err.message || err.name || 'Unknown error'}`);
+                setError(`Camera error: ${err.message || err.name || 'Unknown error'}. Please refresh and try again.`);
             }
+        }
+    }, [facingMode, enumerateCameras]);
+
+    // Fallback camera start with basic constraints
+    const startCameraFallback = useCallback(async () => {
+        console.log('Trying camera fallback...');
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            const basicConstraints = {
+                video: {
+                    facingMode: facingMode,
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                },
+                audio: false
+            };
+
+            const stream = await navigator.mediaDevices.getUserMedia(basicConstraints);
+            streamRef.current = stream;
+
+            if (videoRef.current) {
+                videoRef.current.srcObject = stream;
+                videoRef.current.onloadedmetadata = () => {
+                    setVideoReady(true);
+                    setIsLoading(false);
+                };
+                await videoRef.current.play();
+            }
+
+            setHasPermission(true);
+        } catch (err) {
+            console.error('Camera fallback error:', err);
+            setHasPermission(false);
+            setIsLoading(false);
+            setError('Unable to access camera even with basic settings. Please check your camera permissions.');
         }
     }, [facingMode]);
 
