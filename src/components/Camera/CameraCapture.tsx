@@ -10,12 +10,18 @@ import {
     DialogActions,
     Alert,
     CircularProgress,
+    Fade,
+    Zoom,
 } from '@mui/material';
 import {
     CameraAlt as CameraIcon,
     FlipCameraIos as FlipIcon,
     Close as CloseIcon,
     Refresh as RefreshIcon,
+    FlashOn as FlashIcon,
+    FlashOff as FlashOffIcon,
+    GridOn as GridIcon,
+    GridOff as GridOffIcon,
 } from '@mui/icons-material';
 
 interface CameraCaptureProps {
@@ -38,6 +44,10 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({
     const [error, setError] = useState<string | null>(null);
     const [isCapturing, setIsCapturing] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
+    const [showGrid, setShowGrid] = useState(true);
+    const [captureFlash, setCaptureFlash] = useState(false);
+    const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
+    const [videoReady, setVideoReady] = useState(false);
 
     // Start camera
     const startCamera = useCallback(async () => {
