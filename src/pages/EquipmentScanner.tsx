@@ -85,7 +85,7 @@ interface AnalysisResult {
 
 const EquipmentScanner: React.FC = () => {
   const navigate = useNavigate();
-  const { addAnalysisResult } = useAssetStore();
+  const { addAnalysisResult, addAsset, getAssetByTag, registeredItems, addRegisteredItem } = useAssetStore();
   
   // State management
   const [showCamera, setShowCamera] = useState(false);
@@ -107,6 +107,11 @@ const EquipmentScanner: React.FC = () => {
   const [analysisStatus, setAnalysisStatus] = useState<string>('');
   const [imageQualityMetrics, setImageQualityMetrics] = useState<ImageQualityMetrics | null>(null);
   const [preAnalysisTime, setPreAnalysisTime] = useState<number>(0);
+
+  // Registration state management
+  const [registeringItems, setRegisteringItems] = useState<Set<string>>(new Set());
+  const [registeredItemsLocal, setRegisteredItemsLocal] = useState<Set<string>>(new Set());
+  const [failedItems, setFailedItems] = useState<Set<string>>(new Set());
 
   // Poll for analysis results
   const pollAnalysisResult = useCallback(async (jobId: string): Promise<void> => {
