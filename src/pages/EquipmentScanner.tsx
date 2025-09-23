@@ -91,51 +91,113 @@ const EquipmentScanner: React.FC = () => {
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [imageFileName, setImageFileName] = useState<string>('');
 
+  const [equipmentItems, setEquipmentItems] = useState<EquipmentItem[]>([]);
+  const [analysisMetadata, setAnalysisMetadata] = useState<{
+    imageQuality: string;
+    totalItems: number;
+    recommendations: string;
+    confidenceScore: number;
+    processingTime: number;
+  } | null>(null);
+  const [currentJobId, setCurrentJobId] = useState<string | null>(null);
+  const [analysisStatus, setAnalysisStatus] = useState<string>('');
+
+  // Poll for analysis results
+  const pollAnalysisResult = useCallback(async (jobId: string): Promise<void> => {
+    const maxRetries = 30; // 30 retries with 2-second intervals = 1 minute max
+    let retries = 0;
+
+    const checkStatus = async (): Promise<void> => {
+      try {
+        const result: AnalysisResultResponse = await analysisApi.getAnalysisResult(jobId);
+        
+        setAnalysisStatus(result.status);
+
+        if (result.status === 'completed') {
+          // Analysis completed successfully
+          setEquipmentItems(result.result.equipment);
+          setAnalysisMetadata({
+            imageQuality: result.result.image_quality,
+            totalItems: result.result.total_items,
+            recommendations: result.result.recommendations,
+            confidenceScore: result.result.confidence_score,
+            processingTime: result.processing_time,
+          });
+
+          // Store in global state for history
+          addAnalysisResult({
+            id: result.id,
+            timestamp: result.created_at,
+            result: {
+              item_type: `${result.result.total_items} Equipment Items`,
+              description: `Detected ${result.result.equipment.length} equipment items`,
+              condition: 'Analysis Complete',
+              confidence: result.result.confidence_score,
+              suggestions: {
+                notes: result.result.recommendations,
+              },
+            },
+            image: capturedImage || '',
+          });
+
+          toast.success('Equipment analysis completed!');
+          setIsAnalyzing(false);
+          setCurrentJobId(null);
+        } else if (result.status === 'failed') {
+          // Analysis failed
+          throw new Error(result.error_message || 'Analysis failed');
+        } else if (result.status === 'pending' || result.status === 'processing') {
+          // Still processing, continue polling
+          if (retries < maxRetries) {
+            retries++;
+            setTimeout(checkStatus, 2000); // Check again in 2 seconds
+          } else {
+            throw new Error('Analysis timed out. Please try again.');
+          }
+        }
+      } catch (err) {
+        console.error('Error checking analysis status:', err);
+        const errorMessage = err instanceof Error ? err.message : 'Failed to check analysis status';
+        setError(errorMessage);
+        toast.error(errorMessage);
+        setIsAnalyzing(false);
+        setCurrentJobId(null);
+      }
+    };
+
+    await checkStatus();
+  }, [addAnalysisResult, capturedImage]);
+
   // Handle image analysis
   const analyzeImage = useCallback(async (imageData: string, fileName: string) => {
     setIsAnalyzing(true);
     setError(null);
+    setEquipmentItems([]);
+    setAnalysisMetadata(null);
+    setAnalysisResult(null);
     setCapturedImage(`data:image/jpeg;base64,${imageData}`);
     setImageFileName(fileName);
+    setAnalysisStatus('pending');
 
     try {
-      const result = await analysisApi.analyzeImage(imageData);
+      // Start analysis job
+      const jobResponse: AnalysisJobResponse = await analysisApi.analyzeImage(imageData);
       
-      // Transform API response to match our interface
-      const analysisResult: AnalysisResult = {
-        item_type: result.item_type || 'Unknown Equipment',
-        description: result.description || 'Equipment detected',
-        condition: result.condition || 'Good',
-        weight: result.weight,
-        confidence: result.confidence || 0.8,
-        suggestions: {
-          asset_tag: result.suggested_tag,
-          location: result.suggested_location,
-          notes: result.notes,
-        },
-      };
+      setCurrentJobId(jobResponse.job_id);
+      toast.success('Analysis job created. Processing image...');
 
-      setAnalysisResult(analysisResult);
-      
-      // Store in global state for potential use
-      addAnalysisResult({
-        id: Date.now().toString(),
-        timestamp: new Date().toISOString(),
-        result: analysisResult,
-        image: `data:image/jpeg;base64,${imageData}`,
-      });
-
-      toast.success('Equipment analyzed successfully!');
+      // Start polling for results
+      await pollAnalysisResult(jobResponse.job_id);
       
     } catch (err) {
       console.error('Analysis error:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to analyze image';
       setError(errorMessage);
       toast.error(errorMessage);
-    } finally {
       setIsAnalyzing(false);
+      setCurrentJobId(null);
     }
-  }, [addAnalysisResult]);
+  }, [pollAnalysisResult]);
 
   // Handle camera capture
   const handleCameraCapture = useCallback((imageData: string) => {
