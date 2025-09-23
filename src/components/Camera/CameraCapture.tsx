@@ -253,15 +253,55 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({
 
     // Toggle camera (front/back)
     const toggleCamera = useCallback(() => {
-        setFacingMode(prev => prev === 'user' ? 'environment' : 'user');
+        if (availableCameras.length > 1) {
+            setFacingMode(prev => prev === 'user' ? 'environment' : 'user');
+        }
+    }, [availableCameras.length]);
+
+    // Toggle grid
+    const toggleGrid = useCallback(() => {
+        setShowGrid(prev => !prev);
     }, []);
 
     // Retry camera access
     const retryCamera = useCallback(() => {
         setError(null);
         setHasPermission(null);
+        setVideoReady(false);
         startCamera();
     }, [startCamera]);
+
+    // Grid overlay component
+    const GridOverlay = React.memo(() => (
+        <Box
+            sx={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                pointerEvents: 'none',
+                opacity: showGrid ? 0.3 : 0,
+                transition: 'opacity 0.2s ease',
+            }}
+        >
+            {/* Rule of thirds grid */}
+            <svg width="100%" height="100%" style={{ position: 'absolute' }}>
+                <defs>
+                    <pattern id="grid" width="33.333%" height="33.333%" patternUnits="objectBoundingBox">
+                        <rect width="100%" height="100%" fill="none" stroke="white" strokeWidth="1" />
+                    </pattern>
+                </defs>
+                <rect width="100%" height="100%" fill="url(#grid)" />
+                {/* Vertical lines */}
+                <line x1="33.333%" y1="0" x2="33.333%" y2="100%" stroke="white" strokeWidth="1" />
+                <line x1="66.666%" y1="0" x2="66.666%" y2="100%" stroke="white" strokeWidth="1" />
+                {/* Horizontal lines */}
+                <line x1="0" y1="33.333%" x2="100%" y2="33.333%" stroke="white" strokeWidth="1" />
+                <line x1="0" y1="66.666%" x2="100%" y2="66.666%" stroke="white" strokeWidth="1" />
+            </svg>
+        </Box>
+    ));
 
     // Start camera when component mounts or facingMode changes
     useEffect(() => {
