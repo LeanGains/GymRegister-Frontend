@@ -589,33 +589,49 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({
                 </Box>
             </DialogContent>
 
-            <DialogActions sx={{ p: 3, justifyContent: 'center' }}>
-                {hasPermission && !error && !isLoading && (
-                    <Button
-                        variant="contained"
-                        size="large"
-                        onClick={capturePhoto}
-                        disabled={isCapturing || isAnalyzing}
-                        startIcon={
-                            isCapturing || isAnalyzing ? (
-                                <CircularProgress size={20} />
-                            ) : (
-                                <CameraIcon />
-                            )
-                        }
-                        sx={{
-                            minWidth: 200,
-                            height: 56,
-                            fontSize: '1.1rem',
-                        }}
-                    >
-                        {isCapturing
-                            ? 'Capturing...'
-                            : isAnalyzing
-                                ? 'Analyzing...'
-                                : 'Capture Photo'
-                        }
-                    </Button>
+            <DialogActions sx={{ p: 3, justifyContent: 'center', gap: 2 }}>
+                {hasPermission && !error && !isLoading && videoReady && (
+                    <Zoom in={true} timeout={300}>
+                        <Button
+                            variant="contained"
+                            size="large"
+                            onClick={capturePhoto}
+                            disabled={isCapturing || isAnalyzing}
+                            startIcon={
+                                isCapturing || isAnalyzing ? (
+                                    <CircularProgress size={20} color="inherit" />
+                                ) : (
+                                    <CameraIcon />
+                                )
+                            }
+                            sx={{
+                                minWidth: 220,
+                                height: 64,
+                                fontSize: '1.2rem',
+                                fontWeight: 600,
+                                borderRadius: 3,
+                                boxShadow: 3,
+                                background: isCapturing 
+                                    ? 'linear-gradient(45deg, #ff9800 30%, #f57c00 90%)'
+                                    : 'linear-gradient(45deg, #2196f3 30%, #1976d2 90%)',
+                                '&:hover': {
+                                    boxShadow: 6,
+                                    transform: 'translateY(-2px)',
+                                },
+                                '&:disabled': {
+                                    background: 'linear-gradient(45deg, #bdbdbd 30%, #9e9e9e 90%)',
+                                },
+                                transition: 'all 0.2s ease-in-out',
+                            }}
+                        >
+                            {isCapturing
+                                ? '📸 Capturing...'
+                                : isAnalyzing
+                                    ? '🔍 Analyzing...'
+                                    : '📸 Capture Photo'
+                            }
+                        </Button>
+                    </Zoom>
                 )}
 
                 {/* Show retry button when there's an error */}
@@ -629,9 +645,31 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({
                             minWidth: 200,
                             height: 56,
                             fontSize: '1.1rem',
+                            borderRadius: 3,
+                            borderWidth: 2,
+                            '&:hover': {
+                                borderWidth: 2,
+                                transform: 'translateY(-1px)',
+                            },
                         }}
                     >
-                        Try Again
+                        🔄 Try Again
+                    </Button>
+                )}
+
+                {/* Loading state for initial camera setup */}
+                {(hasPermission === null || isLoading) && !error && (
+                    <Button
+                        disabled
+                        size="large"
+                        startIcon={<CircularProgress size={20} />}
+                        sx={{
+                            minWidth: 200,
+                            height: 56,
+                            fontSize: '1.1rem',
+                        }}
+                    >
+                        Setting up camera...
                     </Button>
                 )}
             </DialogActions>
