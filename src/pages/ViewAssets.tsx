@@ -449,7 +449,7 @@ const ViewAssets: React.FC = () => {
         </CardContent>
       </Card>
 
-      {assets.length === 0 && (
+      {assets.length === 0 && !loading && !error && (
         <Alert severity="info" sx={{ mt: 3 }}>
           No assets found. Use the Equipment Scanner or Register Asset page to add some!
         </Alert>
