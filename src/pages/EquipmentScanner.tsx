@@ -902,6 +902,88 @@ const EquipmentScanner: React.FC = () => {
 
           <Divider sx={{ my: 3 }} />
 
+          {/* Registration Summary */}
+          <Box mb={3}>
+            <Typography variant="h6" gutterBottom>
+              Registration Summary
+            </Typography>
+            <Grid container spacing={2}>
+              <Grid item xs={6} sm={3}>
+                <Box textAlign="center" p={2} bgcolor="success.light" borderRadius={1}>
+                  <Typography variant="h4" color="success.dark">
+                    {equipmentItems.filter((equipment, index) => 
+                      getItemRegistrationStatus(equipment, index) === 'registered'
+                    ).length}
+                  </Typography>
+                  <Typography variant="body2" color="success.dark">
+                    Registered
+                  </Typography>
+                </Box>
+              </Grid>
+              <Grid item xs={6} sm={3}>
+                <Box textAlign="center" p={2} bgcolor="warning.light" borderRadius={1}>
+                  <Typography variant="h4" color="warning.dark">
+                    {equipmentItems.filter((equipment, index) => 
+                      getItemRegistrationStatus(equipment, index) === 'registering'
+                    ).length}
+                  </Typography>
+                  <Typography variant="body2" color="warning.dark">
+                    Processing
+                  </Typography>
+                </Box>
+              </Grid>
+              <Grid item xs={6} sm={3}>
+                <Box textAlign="center" p={2} bgcolor="error.light" borderRadius={1}>
+                  <Typography variant="h4" color="error.dark">
+                    {equipmentItems.filter((equipment, index) => 
+                      getItemRegistrationStatus(equipment, index) === 'failed'
+                    ).length}
+                  </Typography>
+                  <Typography variant="body2" color="error.dark">
+                    Failed
+                  </Typography>
+                </Box>
+              </Grid>
+              <Grid item xs={6} sm={3}>
+                <Box textAlign="center" p={2} bgcolor="grey.200" borderRadius={1}>
+                  <Typography variant="h4" color="text.primary">
+                    {equipmentItems.filter((equipment, index) => 
+                      getItemRegistrationStatus(equipment, index) === 'unregistered'
+                    ).length}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Pending
+                  </Typography>
+                </Box>
+              </Grid>
+            </Grid>
+
+            {/* Progress indicator */}
+            <Box mt={2}>
+              <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+                <Typography variant="body2" color="text.secondary">
+                  Registration Progress
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {equipmentItems.filter((equipment, index) => 
+                    getItemRegistrationStatus(equipment, index) === 'registered'
+                  ).length} / {equipmentItems.length}
+                </Typography>
+              </Box>
+              <LinearProgress 
+                variant="determinate" 
+                value={
+                  equipmentItems.length > 0 
+                    ? (equipmentItems.filter((equipment, index) => 
+                        getItemRegistrationStatus(equipment, index) === 'registered'
+                      ).length / equipmentItems.length) * 100 
+                    : 0
+                }
+                sx={{ height: 8, borderRadius: 4 }}
+              />
+            </Box>
+          </Box>
+
           {/* Action Buttons */}
           <Box display="flex" gap={2} justifyContent="center" flexWrap="wrap">
             <Button
@@ -911,6 +993,15 @@ const EquipmentScanner: React.FC = () => {
               startIcon={<EditIcon />}
             >
               Manual Entry
+            </Button>
+            
+            <Button
+              variant="outlined"
+              size="large"
+              onClick={() => navigate('/assets')}
+              startIcon={<SaveIcon />}
+            >
+              View All Assets
             </Button>
             
             <Button
