@@ -290,7 +290,55 @@ const EquipmentScanner: React.FC = () => {
     setAnalysisStatus('');
     setImageQualityMetrics(null);
     setPreAnalysisTime(0);
+    setRegisteringItems(new Set());
+    setRegisteredItemsLocal(new Set());
+    setFailedItems(new Set());
   }, []);
+
+  // Register all equipment items at once
+  const registerAllEquipment = useCallback(async () => {
+    if (equipmentItems.length === 0) return;
+
+    const unregisteredItems = equipmentItems.filter((_, index) => {
+      const itemKey = `${equipmentItems[index].suggested_asset_tag}-${index}`;
+      return !registeredItemsLocal.has(itemKey) && !getAssetByTag(equipmentItems[index].suggested_asset_tag);
+    });
+
+    if (unregisteredItems.length === 0) {
+      toast.info('All items have already been registered');
+      return;
+    }
+
+    toast.success(`Registering ${unregisteredItems.length} equipment items...`);
+
+    // Register items sequentially to avoid overwhelming the API
+    for (let i = 0; i < equipmentItems.length; i++) {
+      const equipment = equipmentItems[i];
+      const itemKey = `${equipment.suggested_asset_tag}-${i}`;
+      
+      if (!registeredItemsLocal.has(itemKey) && !getAssetByTag(equipment.suggested_asset_tag)) {
+        await addEquipmentToRegister(equipment, i);
+        // Add small delay between requests
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+  }, [equipmentItems, registeredItemsLocal, getAssetByTag, addEquipmentToRegister]);
+
+  // Get registration status for an item
+  const getItemRegistrationStatus = useCallback((equipment: EquipmentItem, index: number) => {
+    const itemKey = `${equipment.suggested_asset_tag}-${index}`;
+    const existingAsset = getAssetByTag(equipment.suggested_asset_tag);
+    
+    if (existingAsset || registeredItemsLocal.has(itemKey)) {
+      return 'registered';
+    } else if (registeringItems.has(itemKey)) {
+      return 'registering';
+    } else if (failedItems.has(itemKey)) {
+      return 'failed';
+    } else {
+      return 'unregistered';
+    }
+  }, [getAssetByTag, registeredItemsLocal, registeringItems, failedItems]);
 
   // Add equipment item directly to register
   const addEquipmentToRegister = useCallback(async (equipment: EquipmentItem, index: number) => {
