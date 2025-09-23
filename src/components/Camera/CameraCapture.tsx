@@ -446,6 +446,24 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({
                                 style={{ display: 'none' }}
                             />
 
+                            {/* Grid overlay */}
+                            <GridOverlay />
+
+                            {/* Flash overlay for capture effect */}
+                            <Fade in={captureFlash} timeout={150}>
+                                <Box
+                                    sx={{
+                                        position: 'absolute',
+                                        top: 0,
+                                        left: 0,
+                                        right: 0,
+                                        bottom: 0,
+                                        bgcolor: 'rgba(255, 255, 255, 0.8)',
+                                        pointerEvents: 'none',
+                                    }}
+                                />
+                            </Fade>
+
                             {/* Camera overlay */}
                             <Box
                                 sx={{
@@ -462,51 +480,109 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({
                                 }}
                             >
                                 {/* Top controls */}
-                                <Box display="flex" justifyContent="flex-end">
-                                    <IconButton
-                                        onClick={toggleCamera}
-                                        sx={{
-                                            color: 'white',
-                                            bgcolor: 'rgba(0,0,0,0.5)',
-                                            pointerEvents: 'auto',
-                                            '&:hover': {
-                                                bgcolor: 'rgba(0,0,0,0.7)',
-                                            },
-                                        }}
-                                    >
-                                        <FlipIcon />
-                                    </IconButton>
+                                <Box display="flex" justifyContent="space-between" alignItems="flex-start">
+                                    <Box display="flex" gap={1}>
+                                        <IconButton
+                                            onClick={toggleGrid}
+                                            sx={{
+                                                color: 'white',
+                                                bgcolor: showGrid ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.5)',
+                                                pointerEvents: 'auto',
+                                                '&:hover': {
+                                                    bgcolor: showGrid ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.7)',
+                                                },
+                                            }}
+                                            title={showGrid ? 'Hide grid' : 'Show grid'}
+                                        >
+                                            {showGrid ? <GridOffIcon /> : <GridIcon />}
+                                        </IconButton>
+                                    </Box>
+
+                                    <Box display="flex" gap={1}>
+                                        {availableCameras.length > 1 && (
+                                            <IconButton
+                                                onClick={toggleCamera}
+                                                sx={{
+                                                    color: 'white',
+                                                    bgcolor: 'rgba(0,0,0,0.5)',
+                                                    pointerEvents: 'auto',
+                                                    '&:hover': {
+                                                        bgcolor: 'rgba(0,0,0,0.7)',
+                                                    },
+                                                }}
+                                                title="Switch camera"
+                                            >
+                                                <FlipIcon />
+                                            </IconButton>
+                                        )}
+                                    </Box>
                                 </Box>
 
-                                {/* Center guide */}
-                                <Box
-                                    sx={{
-                                        alignSelf: 'center',
-                                        width: 250,
-                                        height: 250,
-                                        border: '2px solid rgba(255,255,255,0.8)',
-                                        borderRadius: 2,
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                    }}
-                                >
-                                    <Typography
-                                        variant="body2"
+                                {/* Center focus guide */}
+                                <Zoom in={videoReady} timeout={500}>
+                                    <Box
                                         sx={{
-                                            color: 'white',
-                                            textAlign: 'center',
-                                            bgcolor: 'rgba(0,0,0,0.5)',
-                                            p: 1,
-                                            borderRadius: 1,
+                                            alignSelf: 'center',
+                                            width: { xs: 200, sm: 280 },
+                                            height: { xs: 200, sm: 280 },
+                                            border: '2px solid rgba(255,255,255,0.6)',
+                                            borderRadius: 2,
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            gap: 1,
                                         }}
                                     >
-                                        Position equipment in frame
-                                    </Typography>
-                                </Box>
+                                        <Typography
+                                            variant="body2"
+                                            sx={{
+                                                color: 'white',
+                                                textAlign: 'center',
+                                                bgcolor: 'rgba(0,0,0,0.6)',
+                                                px: 2,
+                                                py: 1,
+                                                borderRadius: 1,
+                                                fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                                            }}
+                                        >
+                                            📦 Position equipment in frame
+                                        </Typography>
+                                        <Typography
+                                            variant="caption"
+                                            sx={{
+                                                color: 'rgba(255,255,255,0.8)',
+                                                textAlign: 'center',
+                                                bgcolor: 'rgba(0,0,0,0.4)',
+                                                px: 1.5,
+                                                py: 0.5,
+                                                borderRadius: 0.5,
+                                                fontSize: { xs: '0.625rem', sm: '0.75rem' },
+                                            }}
+                                        >
+                                            Ensure good lighting for best results
+                                        </Typography>
+                                    </Box>
+                                </Zoom>
 
-                                {/* Bottom space for controls */}
-                                <Box height={80} />
+                                {/* Bottom info */}
+                                <Box display="flex" justifyContent="center" alignItems="center">
+                                    {videoReady && (
+                                        <Typography
+                                            variant="caption"
+                                            sx={{
+                                                color: 'rgba(255,255,255,0.8)',
+                                                bgcolor: 'rgba(0,0,0,0.4)',
+                                                px: 1.5,
+                                                py: 0.5,
+                                                borderRadius: 1,
+                                                fontSize: '0.75rem',
+                                            }}
+                                        >
+                                            📹 {videoRef.current?.videoWidth}x{videoRef.current?.videoHeight}
+                                        </Typography>
+                                    )}
+                                </Box>
                             </Box>
                         </>
                     )}
