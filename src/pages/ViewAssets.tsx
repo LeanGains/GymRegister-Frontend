@@ -32,7 +32,7 @@ import { useAssetStore, Asset } from '../store/assetStore';
 import { assetApi } from '../services/api';
 
 const ViewAssets: React.FC = () => {
-  const { updateAsset, deleteAsset, loading, setLoading, error, setError } = useAssetStore();
+  const { deleteAsset, loading, setLoading, error, setError } = useAssetStore();
   
   // Local state for API-fetched assets
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -70,7 +70,7 @@ const ViewAssets: React.FC = () => {
       fetchAssets();
       setIsInitialized(true);
     }
-  }, [isInitialized]);
+  }, [fetchAssets, isInitialized]);
 
   // Get unique values for filter options
   const filterOptions = useMemo(() => {

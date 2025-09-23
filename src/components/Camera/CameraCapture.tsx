@@ -18,8 +18,6 @@ import {
     FlipCameraIos as FlipIcon,
     Close as CloseIcon,
     Refresh as RefreshIcon,
-    FlashOn as FlashIcon,
-    FlashOff as FlashOffIcon,
     GridOn as GridIcon,
     GridOff as GridOffIcon,
 } from '@mui/icons-material';
