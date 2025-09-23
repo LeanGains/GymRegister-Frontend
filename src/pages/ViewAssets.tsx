@@ -45,9 +45,6 @@ const ViewAssets: React.FC = () => {
     condition: 'All',
   });
 
-  // Import API functions
-  const { assetApi } = require('../services/api');
-
   // Fetch assets from API
   const fetchAssets = async () => {
     setLoading(true);
