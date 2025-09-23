@@ -132,6 +132,12 @@ export const analysisApi = {
     return response.data;
   },
 
+  // Get analysis job status and results
+  getAnalysisResult: async (jobId: string): Promise<any> => {
+    const response = await api.get(`/api/analyze/${jobId}`);
+    return response.data;
+  },
+
   // Get analysis history
   getAnalysisHistory: async (): Promise<any[]> => {
     const response = await api.get('/api/analysis/history');
