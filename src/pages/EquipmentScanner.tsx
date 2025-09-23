@@ -206,7 +206,7 @@ const EquipmentScanner: React.FC = () => {
             if (qualityMetrics.quality === 'poor') {
               toast.error(`Image quality is ${qualityMetrics.quality}. Consider retaking for better results.`);
             } else if (qualityMetrics.quality === 'fair') {
-              toast.warning(`Image quality is ${qualityMetrics.quality}. Results may vary.`);
+              toast.error(`Image quality is ${qualityMetrics.quality}. Results may vary.`);
             } else {
               toast.success(`Image quality is ${qualityMetrics.quality}! Proceeding with analysis.`);
             }

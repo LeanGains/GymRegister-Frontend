@@ -3,7 +3,7 @@ import { Asset, AnalysisResult } from '../store/assetStore';
 
 // Create axios instance with base configuration
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:8000',
+  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:8004',
   timeout: 30000, // 30 seconds for AI analysis
   headers: {
     'Content-Type': 'application/json',
@@ -13,11 +13,18 @@ const api = axios.create({
 // Request interceptor for adding auth tokens if needed
 api.interceptors.request.use(
   (config) => {
-    // Add auth token if available
+        // Add API key from environment variable
+        const apiKey = process.env.REACT_APP_API_KEY;
+        if (apiKey) {
+            config.headers['X-API-KEY'] = apiKey;
+        }
+
+        // Add auth token if available (for user-specific operations)
     const token = localStorage.getItem('auth_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
     return config;
   },
   (error) => {
@@ -33,9 +40,57 @@ api.interceptors.response.use(
       // Handle unauthorized access
       localStorage.removeItem('auth_token');
       window.location.href = '/login';
+        } else if (error.response?.status === 403) {
+            // Handle forbidden (invalid API key)
+            console.error('Invalid API key or insufficient permissions');
+            // You might want to show a user-friendly error here
     }
     return Promise.reject(error);
   }
+);
+
+// Alternative: Function to set API key dynamically
+export const setApiKey = (apiKey: string) => {
+    // Store in memory for this session
+    api.defaults.headers.common['X-API-KEY'] = apiKey;
+
+    // Optionally store in localStorage (be careful with security)
+    // localStorage.setItem('api_key', apiKey);
+};
+
+// Alternative: Function to get API key from different sources
+const getApiKey = (): string | null => {
+    // Priority order: environment variable, localStorage, sessionStorage
+    return (
+        process.env.REACT_APP_API_KEY ||
+        localStorage.getItem('api_key') ||
+        sessionStorage.getItem('api_key') ||
+        null
+    );
+};
+
+// Updated request interceptor with dynamic API key retrieval
+api.interceptors.request.use(
+    (config) => {
+        // Get API key dynamically
+        const apiKey = getApiKey();
+        if (apiKey) {
+            config.headers['X-API-KEY'] = apiKey;
+        } else {
+            console.warn('No API key found. Requests may fail.');
+        }
+
+        // Add auth token if available (for user-specific operations)
+        const token = localStorage.getItem('auth_token');
+        if (token) {
+            config.headers.Authorization = `Bearer ${token}`;
+        }
+
+        return config;
+    },
+    (error) => {
+        return Promise.reject(error);
+    }
 );
 
 export interface CreateAssetRequest {
@@ -125,9 +180,27 @@ export const assetApi = {
 // AI Analysis API endpoints
 export const analysisApi = {
   // Analyze image for equipment detection
-  analyzeImage: async (imageData: string): Promise<any> => {
-    const response = await api.post('/api/analyze', {
-      image: imageData
+    analyzeImage: async (imageData: string, assetTag?: string): Promise<any> => {
+        // Convert base64 to File object
+        const byteCharacters = atob(imageData);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const file = new File([byteArray], 'captured-image.jpg', { type: 'image/jpeg' });
+
+        // Create FormData
+        const formData = new FormData();
+        formData.append('file', file);
+        if (assetTag) {
+            formData.append('asset_tag', assetTag);
+        }
+
+        const response = await api.post('/api/analyze', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
     });
     return response.data;
   },
@@ -245,6 +318,41 @@ export const healthCheck = async (): Promise<boolean> => {
   } catch {
     return false;
   }
+};
+
+// API Key management utilities
+export const apiKeyUtils = {
+    // Set API key for the session
+    setApiKey: (apiKey: string) => {
+        api.defaults.headers.common['X-API-KEY'] = apiKey;
+    },
+
+    // Remove API key
+    removeApiKey: () => {
+        delete api.defaults.headers.common['X-API-KEY'];
+    },
+
+    // Check if API key is set
+    hasApiKey: (): boolean => {
+        return !!getApiKey();
+    },
+
+    // Store API key securely (use with caution)
+    storeApiKey: (apiKey: string, persistent: boolean = false) => {
+        if (persistent) {
+            localStorage.setItem('api_key', apiKey);
+        } else {
+            sessionStorage.setItem('api_key', apiKey);
+        }
+        api.defaults.headers.common['X-API-KEY'] = apiKey;
+    },
+
+    // Clear stored API key
+    clearStoredApiKey: () => {
+        localStorage.removeItem('api_key');
+        sessionStorage.removeItem('api_key');
+        delete api.defaults.headers.common['X-API-KEY'];
+    },
 };
 
 export default api;
