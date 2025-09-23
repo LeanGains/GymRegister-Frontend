@@ -309,6 +309,34 @@ const ViewAssets: React.FC = () => {
         </Box>
       </Box>
 
+      {/* Error Display */}
+      {error && (
+        <Alert 
+          severity="error" 
+          sx={{ mb: 3 }}
+          onClose={() => setError(null)}
+          action={
+            <Button 
+              color="inherit" 
+              size="small" 
+              onClick={handleRefresh}
+              disabled={loading}
+            >
+              Retry
+            </Button>
+          }
+        >
+          {error}
+        </Alert>
+      )}
+
+      {/* Loading State */}
+      {loading && !assets.length && (
+        <Alert severity="info" sx={{ mb: 3 }}>
+          Loading assets from API...
+        </Alert>
+      )}
+
       {/* Filters */}
       <Card sx={{ mb: 3 }}>
         <CardContent>
