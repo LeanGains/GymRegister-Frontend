@@ -30,6 +30,7 @@ import CameraCapture from '../components/Camera/CameraCapture';
 import ImageUpload from '../components/Upload/ImageUpload';
 import { analysisApi } from '../services/api';
 import { useAssetStore } from '../store/assetStore';
+import ImageAnalysisUtils, { ImageQualityMetrics } from '../utils/imageAnalysisUtils';
 
 interface AnalysisJobResponse {
   job_id: string;
