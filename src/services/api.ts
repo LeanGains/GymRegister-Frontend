@@ -211,30 +211,8 @@ export const analysisApi = {
     return response.data;
   },
 
-    // Alternative method if you want to upload a File directly
-    analyzeImageFile: async (file: File, assetTag?: string): Promise<any> => {
-        const formData = new FormData();
-        formData.append('file', file);
-        if (assetTag) {
-            formData.append('asset_tag', assetTag);
-        }
-
-        const response = await api.post('/api/analyze', formData, {
-            headers: {
-                'Content-Type': 'multipart/form-data',
-            },
-        });
-        return response.data;
-    },
-
-  // Get analysis job status and results
-  getAnalysisResult: async (jobId: string): Promise<any> => {
-    const response = await api.get(`/api/analyze/${jobId}`);
-    return response.data;
-  },
-
-    // Get analysis history
-    getAnalysisHistory: async (): Promise<any[]> => {
+  // Get analysis history
+  getAnalysisHistory: async (): Promise<any[]> => {
         const response = await api.get('/api/analysis/history');
         return response.data;
     },
