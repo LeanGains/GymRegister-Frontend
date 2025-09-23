@@ -30,7 +30,11 @@ import toast from 'react-hot-toast';
 import { useAssetStore, Asset } from '../store/assetStore';
 
 const ViewAssets: React.FC = () => {
-  const { assets, updateAsset, deleteAsset } = useAssetStore();
+  const { updateAsset, deleteAsset, loading, setLoading, error, setError } = useAssetStore();
+  
+  // Local state for API-fetched assets
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [isInitialized, setIsInitialized] = useState(false);
   
   const [filters, setFilters] = useState({
     type: 'All',
@@ -38,6 +42,36 @@ const ViewAssets: React.FC = () => {
     location: '',
     condition: 'All',
   });
+
+  // Import API functions
+  const { assetApi } = require('../services/api');
+
+  // Fetch assets from API
+  const fetchAssets = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const fetchedAssets = await assetApi.getAssets();
+      setAssets(fetchedAssets);
+    } catch (err: any) {
+      console.error('Error fetching assets:', err);
+      const errorMessage = err.response?.data?.message || 
+                          err.message || 
+                          'Failed to fetch assets from API';
+      setError(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Initialize component and fetch assets
+  React.useEffect(() => {
+    if (!isInitialized) {
+      fetchAssets();
+      setIsInitialized(true);
+    }
+  }, [isInitialized]);
 
   // Get unique values for filter options
   const filterOptions = useMemo(() => {
