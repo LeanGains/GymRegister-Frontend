@@ -270,7 +270,7 @@ const EquipmentScanner: React.FC = () => {
     setImageFileName('');
   }, []);
 
-  // Reset scanner
+  // Reset scanner completely
   const resetScannerComplete = useCallback(() => {
     setAnalysisResult(null);
     setEquipmentItems([]);
@@ -280,6 +280,8 @@ const EquipmentScanner: React.FC = () => {
     setImageFileName('');
     setCurrentJobId(null);
     setAnalysisStatus('');
+    setImageQualityMetrics(null);
+    setPreAnalysisTime(0);
   }, []);
 
   // Navigate to register with pre-filled data for a specific equipment item
