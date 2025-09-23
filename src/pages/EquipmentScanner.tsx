@@ -580,7 +580,7 @@ const EquipmentScanner: React.FC = () => {
       )}
 
       {/* Upload Interface */}
-      {!analysisResult && !isAnalyzing && (
+      {equipmentItems.length === 0 && !isAnalyzing && (
         <Paper sx={{ p: 3 }}>
           <ImageUpload
             onImageSelect={handleImageUpload}
@@ -592,7 +592,7 @@ const EquipmentScanner: React.FC = () => {
       )}
 
       {/* Quick Actions */}
-      {!analysisResult && !isAnalyzing && (
+      {equipmentItems.length === 0 && !isAnalyzing && (
         <Box mt={4} textAlign="center">
           <Typography variant="h6" gutterBottom>
             Quick Actions
