@@ -171,8 +171,10 @@ const EquipmentScanner: React.FC = () => {
     await checkStatus();
   }, [addAnalysisResult, capturedImage]);
 
-  // Handle image analysis
+  // Handle image analysis with quality assessment
   const analyzeImage = useCallback(async (imageData: string, fileName: string) => {
+    const startTime = performance.now();
+    setPreAnalysisTime(startTime);
     setIsAnalyzing(true);
     setError(null);
     setEquipmentItems([]);
@@ -181,8 +183,43 @@ const EquipmentScanner: React.FC = () => {
     setCapturedImage(`data:image/jpeg;base64,${imageData}`);
     setImageFileName(fileName);
     setAnalysisStatus('pending');
+    setImageQualityMetrics(null);
 
     try {
+      // Perform client-side image quality analysis
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const img = new Image();
+
+      await new Promise((resolve, reject) => {
+        img.onload = async () => {
+          try {
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx?.drawImage(img, 0, 0);
+
+            // Analyze image quality
+            const qualityMetrics = ImageAnalysisUtils.analyzeImageQuality(canvas);
+            setImageQualityMetrics(qualityMetrics);
+
+            // Show quality feedback to user
+            if (qualityMetrics.quality === 'poor') {
+              toast.error(`Image quality is ${qualityMetrics.quality}. Consider retaking for better results.`);
+            } else if (qualityMetrics.quality === 'fair') {
+              toast.warning(`Image quality is ${qualityMetrics.quality}. Results may vary.`);
+            } else {
+              toast.success(`Image quality is ${qualityMetrics.quality}! Proceeding with analysis.`);
+            }
+
+            resolve(true);
+          } catch (err) {
+            reject(err);
+          }
+        };
+        img.onerror = reject;
+        img.src = `data:image/jpeg;base64,${imageData}`;
+      });
+
       // Start analysis job
       const jobResponse: AnalysisJobResponse = await analysisApi.analyzeImage(imageData);
       
@@ -199,6 +236,7 @@ const EquipmentScanner: React.FC = () => {
       toast.error(errorMessage);
       setIsAnalyzing(false);
       setCurrentJobId(null);
+      setImageQualityMetrics(null);
     }
   }, [pollAnalysisResult]);
 
