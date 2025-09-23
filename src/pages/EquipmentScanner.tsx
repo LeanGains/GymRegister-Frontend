@@ -229,7 +229,37 @@ const EquipmentScanner: React.FC = () => {
     setImageFileName('');
   }, []);
 
-  // Navigate to register with pre-filled data
+  // Reset scanner
+  const resetScannerComplete = useCallback(() => {
+    setAnalysisResult(null);
+    setEquipmentItems([]);
+    setAnalysisMetadata(null);
+    setError(null);
+    setCapturedImage(null);
+    setImageFileName('');
+    setCurrentJobId(null);
+    setAnalysisStatus('');
+  }, []);
+
+  // Navigate to register with pre-filled data for a specific equipment item
+  const registerSingleEquipment = useCallback((equipment: EquipmentItem) => {
+    navigate('/register', {
+      state: {
+        analysisData: {
+          item_type: equipment.type,
+          description: equipment.description,
+          condition: equipment.condition,
+          weight: equipment.weight,
+          suggested_tag: equipment.suggested_asset_tag,
+          suggested_location: equipment.location_in_image,
+          notes: `Location in image: ${equipment.location_in_image}`,
+        },
+        capturedImage,
+      },
+    });
+  }, [capturedImage, navigate]);
+
+  // Navigate to register with pre-filled data (legacy function for backward compatibility)
   const registerEquipment = useCallback(() => {
     if (!analysisResult) return;
 
