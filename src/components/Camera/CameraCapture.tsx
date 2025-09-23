@@ -197,15 +197,19 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({
         }
     }, []);
 
-    // Capture photo
+    // Enhanced capture photo with flash effect
     const capturePhoto = useCallback(() => {
-        if (!videoRef.current || !canvasRef.current) {
-            setError('Camera not ready. Please try again.');
+        if (!videoRef.current || !canvasRef.current || !videoReady) {
+            setError('Camera not ready. Please wait a moment and try again.');
             return;
         }
 
         setIsCapturing(true);
         setError(null);
+
+        // Flash effect
+        setCaptureFlash(true);
+        setTimeout(() => setCaptureFlash(false), 150);
 
         try {
             const video = videoRef.current;
@@ -216,29 +220,36 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({
                 throw new Error('Could not get canvas context');
             }
 
-            // Set canvas dimensions to match video
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
+            // Set canvas dimensions to match video with high quality
+            const videoWidth = video.videoWidth;
+            const videoHeight = video.videoHeight;
+            
+            console.log('Capturing at resolution:', videoWidth, 'x', videoHeight);
+            
+            canvas.width = videoWidth;
+            canvas.height = videoHeight;
 
-            // Draw video frame to canvas
-            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            // Clear canvas and draw video frame
+            context.clearRect(0, 0, videoWidth, videoHeight);
+            context.drawImage(video, 0, 0, videoWidth, videoHeight);
 
-            // Convert to base64
-            const dataURL = canvas.toDataURL('image/jpeg', 0.8);
+            // Convert to base64 with high quality
+            const dataURL = canvas.toDataURL('image/jpeg', 0.9);
             const base64Data = dataURL.split(',')[1];
 
-            if (base64Data) {
+            if (base64Data && base64Data.length > 0) {
+                console.log('Capture successful, data size:', Math.round(base64Data.length / 1024), 'KB');
                 onCapture(base64Data);
             } else {
-                setError('Failed to capture image. Please try again.');
+                throw new Error('No image data captured');
             }
         } catch (err) {
             console.error('Capture error:', err);
-            setError('Failed to capture image. Please try again.');
+            setError('Failed to capture image. Please try again or check your camera connection.');
         } finally {
-            setIsCapturing(false);
+            setTimeout(() => setIsCapturing(false), 500); // Slight delay for better UX
         }
-    }, [onCapture]);
+    }, [onCapture, videoReady]);
 
     // Toggle camera (front/back)
     const toggleCamera = useCallback(() => {
