@@ -65,7 +65,7 @@ const ViewAssets: React.FC = () => {
   };
 
   // Initialize component and fetch assets
-  React.useEffect(() => {
+  useEffect(() => {
     if (!isInitialized) {
       fetchAssets();
       setIsInitialized(true);
