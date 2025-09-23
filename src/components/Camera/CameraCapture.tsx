@@ -25,7 +25,7 @@ import {
 } from '@mui/icons-material';
 
 interface CameraCaptureProps {
-    onCapture: (imageData: string) => void;
+    onCapture: (imageData: string, assetTag?: string) => void;
     onClose: () => void;
     isAnalyzing?: boolean;
 }
@@ -107,7 +107,7 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({
 
             if (videoRef.current) {
                 videoRef.current.srcObject = stream;
-                
+
                 // Wait for video metadata to load
                 videoRef.current.onloadedmetadata = () => {
                     console.log('Video metadata loaded:', {
@@ -223,9 +223,9 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({
             // Set canvas dimensions to match video with high quality
             const videoWidth = video.videoWidth;
             const videoHeight = video.videoHeight;
-            
+
             console.log('Capturing at resolution:', videoWidth, 'x', videoHeight);
-            
+
             canvas.width = videoWidth;
             canvas.height = videoHeight;
 
@@ -611,7 +611,7 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({
                                 fontWeight: 600,
                                 borderRadius: 3,
                                 boxShadow: 3,
-                                background: isCapturing 
+                                background: isCapturing
                                     ? 'linear-gradient(45deg, #ff9800 30%, #f57c00 90%)'
                                     : 'linear-gradient(45deg, #2196f3 30%, #1976d2 90%)',
                                 '&:hover': {
