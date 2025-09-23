@@ -14,6 +14,7 @@ import {
   Grid,
   IconButton,
   Tooltip,
+  CircularProgress,
 } from '@mui/material';
 import {
   PhotoCamera as CameraIcon,
@@ -22,13 +23,15 @@ import {
   Refresh as RefreshIcon,
   Save as SaveIcon,
   Edit as EditIcon,
+  CheckCircle as CheckIcon,
+  Error as ErrorIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
 import CameraCapture from '../components/Camera/CameraCapture';
 import ImageUpload from '../components/Upload/ImageUpload';
-import { analysisApi } from '../services/api';
+import { analysisApi, assetApi } from '../services/api';
 import { useAssetStore } from '../store/assetStore';
 import ImageAnalysisUtils, { ImageQualityMetrics } from '../utils/imageAnalysisUtils';
 
