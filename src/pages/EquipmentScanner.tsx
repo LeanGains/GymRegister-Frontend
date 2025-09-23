@@ -454,10 +454,78 @@ const EquipmentScanner: React.FC = () => {
                 </Grid>
               </Grid>
 
+              {/* Image Quality Details */}
+              {imageQualityMetrics && (
+                <Box mt={2}>
+                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                    📊 Image Analysis Details
+                  </Typography>
+                  <Grid container spacing={2} sx={{ mb: 2 }}>
+                    <Grid item xs={6} sm={3}>
+                      <Typography variant="caption" color="text.secondary">
+                        Resolution
+                      </Typography>
+                      <Typography variant="body2" fontWeight="bold">
+                        {imageQualityMetrics.resolution.width}×{imageQualityMetrics.resolution.height}
+                        <Typography variant="caption" color="text.secondary" ml={1}>
+                          ({imageQualityMetrics.resolution.megapixels}MP)
+                        </Typography>
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={6} sm={3}>
+                      <Typography variant="caption" color="text.secondary">
+                        Brightness
+                      </Typography>
+                      <Typography variant="body2" fontWeight="bold">
+                        {Math.round(imageQualityMetrics.brightness)}/255
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={6} sm={3}>
+                      <Typography variant="caption" color="text.secondary">
+                        Contrast
+                      </Typography>
+                      <Typography variant="body2" fontWeight="bold">
+                        {Math.round(imageQualityMetrics.contrast)}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={6} sm={3}>
+                      <Typography variant="caption" color="text.secondary">
+                        Sharpness
+                      </Typography>
+                      <Typography variant="body2" fontWeight="bold">
+                        {Math.round(imageQualityMetrics.sharpness)}
+                      </Typography>
+                    </Grid>
+                  </Grid>
+
+                  {imageQualityMetrics.recommendations.length > 0 && (
+                    <Alert 
+                      severity={
+                        imageQualityMetrics.quality === 'excellent' ? 'success' :
+                        imageQualityMetrics.quality === 'good' ? 'info' :
+                        imageQualityMetrics.quality === 'fair' ? 'warning' : 'error'
+                      }
+                      sx={{ mb: 2 }}
+                    >
+                      <Typography variant="subtitle2" gutterBottom>
+                        📸 Image Quality Tips:
+                      </Typography>
+                      <Box component="ul" sx={{ pl: 2, mb: 0 }}>
+                        {imageQualityMetrics.recommendations.map((tip, index) => (
+                          <li key={index}>
+                            <Typography variant="body2">{tip}</Typography>
+                          </li>
+                        ))}
+                      </Box>
+                    </Alert>
+                  )}
+                </Box>
+              )}
+
               {analysisMetadata.recommendations && (
                 <Box mt={2}>
                   <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                    AI Recommendations
+                    🤖 AI Analysis Recommendations
                   </Typography>
                   <Alert severity="info" sx={{ mb: 2 }}>
                     {analysisMetadata.recommendations}
