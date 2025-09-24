@@ -33,11 +33,11 @@ import { assetApi } from '../services/api';
 
 const ViewAssets: React.FC = () => {
   const { deleteAsset, loading, setLoading, error, setError } = useAssetStore();
-  
+
   // Local state for API-fetched assets
   const [assets, setAssets] = useState<Asset[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
-  
+
   const [filters, setFilters] = useState({
     type: 'All',
     status: 'All',
@@ -54,8 +54,8 @@ const ViewAssets: React.FC = () => {
       setAssets(fetchedAssets);
     } catch (err: any) {
       console.error('Error fetching assets:', err);
-      const errorMessage = err.response?.data?.message || 
-                          err.message || 
+      const errorMessage = err.response?.data?.message ||
+                          err.message ||
                           'Failed to fetch assets from API';
       setError(errorMessage);
       toast.error(errorMessage);
@@ -70,14 +70,14 @@ const ViewAssets: React.FC = () => {
       fetchAssets();
       setIsInitialized(true);
     }
-  }, [fetchAssets, isInitialized]);
+  }, [isInitialized]);
 
   // Get unique values for filter options
   const filterOptions = useMemo(() => {
     const types = ['All', ...Array.from(new Set(assets.map(a => a.item_type)))];
     const statuses = ['All', ...Array.from(new Set(assets.map(a => a.status)))];
     const conditions = ['All', ...Array.from(new Set(assets.map(a => a.condition)))];
-    
+
     return { types, statuses, conditions };
   }, [assets]);
 
@@ -126,7 +126,7 @@ const ViewAssets: React.FC = () => {
     a.click();
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
-    
+
     toast.success('Assets exported successfully!');
   };
 
@@ -142,8 +142,8 @@ const ViewAssets: React.FC = () => {
         toast.success(`Asset ${asset.asset_tag} deleted successfully!`);
       } catch (err: any) {
         console.error('Error deleting asset:', err);
-        const errorMessage = err.response?.data?.message || 
-                            err.message || 
+        const errorMessage = err.response?.data?.message ||
+                            err.message ||
                             'Failed to delete asset';
         setError(errorMessage);
         toast.error(errorMessage);
@@ -311,14 +311,14 @@ const ViewAssets: React.FC = () => {
 
       {/* Error Display */}
       {error && (
-        <Alert 
-          severity="error" 
+        <Alert
+          severity="error"
           sx={{ mb: 3 }}
           onClose={() => setError(null)}
           action={
-            <Button 
-              color="inherit" 
-              size="small" 
+            <Button
+              color="inherit"
+              size="small"
               onClick={handleRefresh}
               disabled={loading}
             >

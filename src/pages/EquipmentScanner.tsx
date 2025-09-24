@@ -84,7 +84,7 @@ interface AnalysisResult {
 
 const EquipmentScanner: React.FC = () => {
   const navigate = useNavigate();
-  const { addAnalysisResult, addAsset, getAssetByTag, addRegisteredItem } = useAssetStore();
+  const { addAnalysisResult, getAssetByTag, addRegisteredItem } = useAssetStore();
   
   // State management
   const [showCamera, setShowCamera] = useState(false);
